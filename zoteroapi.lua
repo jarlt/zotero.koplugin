@@ -103,6 +103,34 @@ CREATE TABLE IF NOT EXISTS itemAnnotations (
 );
 ]]
 
+local ZOTERO_DB_SCHEMA_EXTRAS_V2 = [[
+CREATE TABLE IF NOT EXISTS publicationsItems (
+	itemID INTEGER PRIMARY KEY
+);
+CREATE TABLE IF NOT EXISTS itemNotes (
+	itemID INTEGER PRIMARY KEY,
+	parentItemID INT,
+	note TEXT,
+	title TEXT,
+	FOREIGN KEY (itemID) REFERENCES items(itemID) ON DELETE CASCADE,
+	FOREIGN KEY (parentItemID) REFERENCES items(itemID) ON DELETE CASCADE
+);
+CREATE TABLE IF NOT EXISTS tags (
+	tagID INTEGER PRIMARY KEY,
+	name TEXT NOT NULL UNIQUE
+);
+CREATE TABLE IF NOT EXISTS itemTags (
+	itemID INT NOT NULL,
+	tagID INT NOT NULL,
+	type INT NOT NULL,
+	PRIMARY KEY (itemID, tagID),
+	FOREIGN KEY (itemID) REFERENCES items(itemID) ON DELETE CASCADE,
+	FOREIGN KEY (tagID) REFERENCES tags(tagID) ON DELETE CASCADE
+);
+
+]]
+
+
 local ZOTERO_DB_INIT_ITEMTYPES = [[
 INSERT INTO itemTypes(itemTypeID,typeName)
 VALUES
@@ -402,6 +430,20 @@ DELETE FROM itemAttachments WHERE itemID IN (SELECT itemID FROM items WHERE key 
 local ZOTERO_UPSERT_ITEM_ANNOTATIONS = [[
 INSERT INTO itemAnnotations(itemID, parentItemID) SELECT i.itemID, p.itemID FROM items i, items p WHERE i.key = ?1 AND p.key=?2
 ON CONFLICT DO UPDATE SET parentItemID = excluded.parentItemID;
+]]
+
+local ZOTERO_UPSERT_TAG = [[
+INSERT INTO tags(name) VALUES(?)
+ON CONFLICT DO NOTHING;
+]]
+
+local ZOTERO_UPSERT_ITEM_TAGS = [[
+INSERT INTO itemTags(itemID, tagID, type) SELECT ?1, tagID, ?3 FROM tags WHERE name = ?2
+ON CONFLICT DO NOTHING;
+]]
+
+local ZOTERO_GET_ITEM_TAGS_BY_ITEMID = [[
+SELECT name FROM itemTags INNER JOIN tags USING (tagID) WHERE itemID = ?;
 ]]
 
 local ZOTERO_GET_ITEM_VERSION = [[ SELECT version, itemID FROM items WHERE key = ?; ]]
@@ -1184,30 +1226,33 @@ function API.checkItemData(progressCallBack)
 	local frac = 100/stats0.items
 	local dStep = math.max(math.floor(stats0.items/100), 10)
 	
-    local stmt = db:prepare([[SELECT json(value) FROM 
+    local stmt = db:prepare([[SELECT json(value), items.itemID FROM 
     		itemData INNER JOIN items ON itemData.itemID = items.itemID]])
 
-	local stmt_update_collectionItems = db:prepare(ZOTERO_DB_UPDATE_COLLECTION_ITEMS)
+    local stmt_update_collectionItems = db:prepare(ZOTERO_DB_UPDATE_COLLECTION_ITEMS)
 	
     -- to check whether changes where made
-	local stmt_changes = db:prepare(ZOTERO_DB_CHANGES)
+    local stmt_changes = db:prepare(ZOTERO_DB_CHANGES)
+    local stmt_upsert_tag = db:prepare(ZOTERO_UPSERT_TAG)
+    local stmt_upsert_item_tag = db:prepare(ZOTERO_UPSERT_ITEM_TAGS)
 	
-	local attachments = {}
-	local annotations = {}
+    local attachments = {}
+    local annotations = {}
 	
 	local annotationTypes = Annotations.supportedZoteroTypes()
 
-	db:exec("DELETE FROM collectionItems;")
-	db:exec("DELETE FROM itemAnnotations;")
-	db:exec("DELETE FROM itemAttachments;")
+    db:exec("DELETE FROM collectionItems;")
+    db:exec("DELETE FROM itemAnnotations;")
+    db:exec("DELETE FROM itemAttachments;")
     local row = stmt:reset():step()
-    local item
+    local item, itemID
     local cnt = 0
     while row ~= nil do
-		item = JSON.decode(row[1])
+        item = JSON.decode(row[1])
+        itemID = tonumber(row[2])
 		
-		-- Set the correct collection(s) for this item:
-		if item.data.collections ~= nil then
+        -- Set the correct collection(s) for this item:
+        if item.data.collections ~= nil then
 			--if #item.data.collections > 1 then print("Item "..item.key.." is in ", #item.data.collections , " collections: ") end
 			if item.data.collections[1] == nil then -- no collection specified: put in root directory
 				stmt_update_collectionItems:reset():bind('/', item.key):step()
@@ -1217,25 +1262,30 @@ function API.checkItemData(progressCallBack)
 					stmt_update_collectionItems:reset():bind(coll, item.key):step()
 				end
 			end
-		end
+        end
 
-		-- Check if it is a (supported) attachment or annotation
-		-- If so, add it to the relevant table
-		if (item.data.itemType == 'attachment' 
-			and table_contains(SUPPORTED_MEDIA_TYPES, item.data.contentType)) then
-				attachments[item.key] = item.data.parentItem or item.key -- if there is no parent item then use the item as its own parent
-		elseif (item.data.itemType == 'annotation' 
-				and table_contains(annotationTypes, item.data.annotationType)) then
-			annotations[item.key] = item.data.parentItem
-		end
-		cnt = cnt + 1
-		if progressCallBack and (cnt % dStep == 0) then
-			progressCallBack(string.format("Re-analysing items: %.0f%%", cnt*frac))
-		end
+        -- Check if it is a (supported) attachment or annotation
+        -- If so, add it to the relevant table
+        if (item.data.itemType == 'attachment' 
+        	and table_contains(SUPPORTED_MEDIA_TYPES, item.data.contentType)) then
+        	    attachments[item.key] = item.data.parentItem or item.key -- if there is no parent item then use the item as its own parent
+        elseif (item.data.itemType == 'annotation' 
+                and table_contains(annotationTypes, item.data.annotationType)) then
+            annotations[item.key] = item.data.parentItem
+        end
+        for i, tagInfo in pairs(item.data.tags) do
+            print(itemID, item.key, tagInfo.tag)
+            stmt_upsert_tag:reset():bind(tagInfo.tag):step()
+            stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
+        end
+        cnt = cnt + 1
+        if progressCallBack and (cnt % dStep == 0) then
+            progressCallBack(string.format("Re-analysing items: %.0f%%", cnt*frac))
+        end
         row = stmt:step(row)
     end
     stmt:close()
-	if progressCallBack then
+    if progressCallBack then
 		progressCallBack(string.format("Cataloguing attachments"))
 	end
 	API.setItemAttachments(attachments)
