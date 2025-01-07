@@ -638,6 +638,8 @@ function API.init(zotero_dir)
 	
 	--API.scanStorage()
 	--API.getItemWithAttachments("H26YYGWN")
+	--API.tagCount()
+	--API.getTags()
 end
 
 function API.getStats()
@@ -2067,6 +2069,36 @@ function API.syncItemAnnotations(item, annotation_callback)
     settings:flush() 
     docSettings:flush()
 end
+
+-- 
+function API.getTags(item)
+    
+    local db = API.openDB()
+	print("Getting tags")
+    local tags = db:exec([[SELECT name FROM tags ORDER BY name;]])
+    print(JSON.encode(tags[1]))
+    ----[[
+    local result = {}
+    for i, tag in ipairs(tags[1]) do
+		table.insert(result, {
+			["text"] = tag,
+			["type"] = "tag",
+		})
+	end
+	print(JSON.encode(result[1]))
+	return result
+	--]]
+end
+
+-- 
+function API.tagCount()
+    
+    local db = API.openDB()
+    local tagCount = tonumber(db:rowexec([[SELECT COUNT(name) FROM tags;]]))
+    print("Tag count:", tagCount)
+	return tagCount
+end
+
 
 -- Add Zotero document info to sidecar file
 function API.getAttachmentInfo(item)

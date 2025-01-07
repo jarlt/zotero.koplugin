@@ -122,9 +122,11 @@ function ZoteroBrowser:onMenuSelect(item)
         table.insert(self.keys, item.key)
         self:displayCollection(item.key)
     elseif item.type == "wildcard_collection"  then
-        table.insert(self.paths, "All items")
-        table.insert(self.keys, "all")
+        --table.insert(self.paths, "All items")
+        --table.insert(self.keys, "all")
         self:displaySearchResults("")
+    elseif item.type == "tag_collection"  then
+        self:displayTags()
     elseif item.type == "item" then
         self.download_dialog = InfoMessage:new{
             text = _("Downloading file"),
@@ -217,6 +219,13 @@ function ZoteroBrowser:displaySearchResults(query)
     self:setItems(items)
 end
 
+function ZoteroBrowser:displayTags()
+    local items = ZoteroAPI.getTags()
+	table.insert(self.paths, "Tags")
+    table.insert(self.keys, "tags")
+    self:setItems(items)
+end
+
 function ZoteroBrowser:displayCollection(collection_id)
     local items = ZoteroAPI.displayCollection(collection_id)
 
@@ -228,6 +237,13 @@ function ZoteroBrowser:displayCollection(collection_id)
 				["text"] = _("All Items"),
 				["type"] = "wildcard_collection"
 			})
+			if ZoteroAPI.tagCount() > 0 then
+				table.insert(items, 2, {
+					["text"] = _("Tags"),
+					["type"] = "tag_collection",
+					["bold"] = true,
+				})
+			end
 		end
 	else
 	    items = self:addLabelIfEmpty(items)
