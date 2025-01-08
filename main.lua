@@ -88,9 +88,11 @@ end
 
 function ZoteroBrowser:onReturn()
 	table.remove(self.paths, #self.paths)
-    local dir = table.remove(self.keys, #self.keys)
+    local key = table.remove(self.keys, #self.keys)
     if #self.keys == 0 then
         self:displayCollection(nil)
+    elseif key == "tag" then
+		self:displayTags()
     else
         self:displayCollection(self.keys[#self.keys])
     end
@@ -126,7 +128,11 @@ function ZoteroBrowser:onMenuSelect(item)
         --table.insert(self.keys, "all")
         self:displaySearchResults("")
     elseif item.type == "tag_collection"  then
-        self:displayTags()
+		table.insert(self.paths, "Tags/")
+		table.insert(self.keys, "tagList")
+		self:displayTags()
+    elseif item.type == "tag"  then
+        self:displayTaggedItems(item.text)
     elseif item.type == "item" then
         self.download_dialog = InfoMessage:new{
             text = _("Downloading file"),
@@ -221,8 +227,14 @@ end
 
 function ZoteroBrowser:displayTags()
     local items = ZoteroAPI.getTags()
-	table.insert(self.paths, "Tags")
-    table.insert(self.keys, "tags")
+    self:setItems(items)
+end
+
+function ZoteroBrowser:displayTaggedItems(tag)
+    local items = ZoteroAPI.getTaggedItems(tag)
+	table.insert(self.paths, tag)
+    table.insert(self.keys, "tag")
+    print(items[1].text)
     self:setItems(items)
 end
 

@@ -446,6 +446,29 @@ local ZOTERO_GET_ITEM_TAGS_BY_ITEMID = [[
 SELECT name FROM itemTags INNER JOIN tags USING (tagID) WHERE itemID = ?;
 ]]
 
+-- Get items tagged with the provided tag name 
+local ZOTERO_GET_TAGGED_ITEMS = [[
+SELECT 
+	key, 
+	name, 
+	type 
+FROM (
+	SELECT
+	   items.key,
+--		jsonb_extract(value, '$.data.title') AS title,
+		---- if possible, prepend creator summary
+		coalesce(jsonb_extract(value, '$.meta.creatorSummary') || ' - ', '') || jsonb_extract(value, '$.data.title') AS name,
+		iif(items.itemTypeID = 3, 'attachment', 'item') AS type
+	FROM 
+		itemData INNER JOIN items ON itemData.itemID = items.itemID
+	WHERE
+		itemData.itemID IN (
+			SELECT itemID FROM itemTags INNER JOIN tags USING (tagID) WHERE name = ?
+		)
+	)
+ORDER BY name;
+]]
+
 local ZOTERO_GET_ITEM_VERSION = [[ SELECT version, itemID FROM items WHERE key = ?; ]]
 
 -- Return synced version according to database for item identified by its key. Also return lastest version and itemID 
@@ -2074,9 +2097,9 @@ end
 function API.getTags(item)
     
     local db = API.openDB()
-	print("Getting tags")
-    local tags = db:exec([[SELECT name FROM tags ORDER BY name;]])
-    print(JSON.encode(tags[1]))
+	--print("Getting tags")
+    local tags = db:exec([[SELECT name FROM tags ORDER BY lower(name);]])
+    --print(JSON.encode(tags[1]))
     ----[[
     local result = {}
     for i, tag in ipairs(tags[1]) do
@@ -2085,9 +2108,37 @@ function API.getTags(item)
 			["type"] = "tag",
 		})
 	end
-	print(JSON.encode(result[1]))
+	--print(JSON.encode(result[1]))
 	return result
 	--]]
+end
+
+-- Get tagged documents
+function API.getTaggedItems(tag)
+	local db = API.openDB()
+	print("Getting tagged items", tag)
+    local stmt = db:prepare(ZOTERO_GET_TAGGED_ITEMS)
+    stmt:reset()
+    stmt:bind1(1, tag)
+
+    local result, nr = stmt:resultset()
+
+    stmt:close()
+
+    if nr == 0 then
+        return nil
+    end
+
+    local items = {}
+
+    for i=1,nr do
+        table.insert(items, {
+            ["key"] = result[1][i],
+            ["text"] = result[2][i],
+            ["type"] = result[3][i],
+        })
+    end
+    return items
 end
 
 -- 
@@ -2095,7 +2146,7 @@ function API.tagCount()
     
     local db = API.openDB()
     local tagCount = tonumber(db:rowexec([[SELECT COUNT(name) FROM tags;]]))
-    print("Tag count:", tagCount)
+    --print("Tag count:", tagCount)
 	return tagCount
 end
 
