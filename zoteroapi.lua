@@ -442,6 +442,11 @@ INSERT INTO itemTags(itemID, tagID, type) SELECT ?1, tagID, ?3 FROM tags WHERE n
 ON CONFLICT DO NOTHING;
 ]]
 
+local ZOTERO_UPSERT_PUBLICATIONS = [[
+INSERT INTO publicationsItems(itemID) SELECT itemID FROM items WHERE key = ?
+ON CONFLICT DO NOTHING;
+]]
+
 local ZOTERO_GET_ITEM_TAGS_BY_ITEMID = [[
 SELECT name FROM itemTags INNER JOIN tags USING (tagID) WHERE itemID = ?;
 ]]
@@ -597,6 +602,7 @@ function API.openDB()
 		if API.getDatabaseVersion() == 0 then
 			logger.info("Zotero: db version is 0. Set up tables.")
 			API.db:exec(ZOTERO_DB_SCHEMA)
+			API.db:exec(ZOTERO_DB_SCHEMA_EXTRAS_V2)
 			logger.info("Zotero: Set up user library.")
 			API.db:rowexec(ZOTERO_DB_INIT_LIBS)
 			local cnt = API.db:rowexec(ZOTERO_DB_CHANGES)
@@ -1023,6 +1029,9 @@ function API.fetchZoteroItems(since, progress_callback)
 	local stmt_get_ItemVersion = db:prepare(ZOTERO_GET_ITEM_VERSION)
 	local stmt_delete_item = db:prepare(ZOTERO_DB_DELETE_ITEM)
 	local stmt_update_collectionItems = db:prepare(ZOTERO_DB_UPDATE_COLLECTION_ITEMS)
+
+    local stmt_upsert_tag = db:prepare(ZOTERO_UPSERT_TAG)
+    local stmt_upsert_item_tag = db:prepare(ZOTERO_UPSERT_ITEM_TAGS)
 	
     local headers = API.zoteroHeader
     
@@ -1078,6 +1087,14 @@ function API.fetchZoteroItems(since, progress_callback)
 						and table_contains(annotationTypes, item.data.annotationType)) then
 					annotations[key] = item.data.parentItem
 				end
+				local res = stmt_get_ItemVersion:reset():bind(key):step()
+				local itemID = tonumber(res[2])
+				for i, tagInfo in pairs(item.data.tags) do
+					--print(itemID, key, tagInfo.tag)
+					stmt_upsert_tag:reset():bind(tagInfo.tag):step()
+					stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
+				end
+
 			end
         end
     end)
@@ -1180,6 +1197,38 @@ function API.fetchZoteroCollections(since, progress_callback)
 	return r, e
 end
 
+-- Fetch my publications from Zotero server
+function API.fetchMyPublications(since, progress_callback)
+	----[[
+	local callback = progress_callback or function() end
+
+    local db = API.openDB()
+    if since == nil then  since = 0 end
+	-- verify access
+    local e = API.verifyZoteroAccess()
+    if e ~= nil then return e end
+
+    local headers = API.zoteroHeader
+
+	local page_url = API.userLibraryURL.."/publications/items?format=versions"
+	--page_url = API.userLibraryURL.."/searches"
+	--print(page_url)
+	local r, e =  API.getZoteroData(page_url)
+	--print(JSON.encode(r))
+	if r ~= nil then
+		local cnt = 0
+		local stmt_upsert_publications = db:prepare(ZOTERO_UPSERT_PUBLICATIONS)
+		for key, _ in pairs(r) do
+			stmt_upsert_publications:reset():bind(key):step()
+			cnt = cnt + 1
+		end
+		print(cnt, "publications.")
+	else
+		print("No publications.")
+	end
+	--]]
+end
+
 -- Sync local db with zotero server
 -- This includes:
 -- 1. uploading local annotations
@@ -1208,23 +1257,6 @@ function API.syncAllItems(progress_callback)
 		end
 	end
 	
-	--[[
-	-- try downloading My publications:
-	local page_url = API.userLibraryURL.."/publications/items?format=versions"
-	--page_url = API.userLibraryURL.."/searches"
-	--print(page_url)
-	local r, e =  API.getZoteroData(page_url)
-	--print(JSON.encode(r))
-	if r ~= nil then
-		local cnt = 0
-		for key, _ in pairs(r) do
-			cnt = cnt + 1
-		end
-		print(cnt, "publications.")
-	else
-		print("No publications.")
-	end
-	--]]
 	
 	local r, e = API.fetchZoteroCollections(since, progress_callback)
     if e ~= nil then return e end
@@ -1233,6 +1265,8 @@ function API.syncAllItems(progress_callback)
     if e ~= nil then return e end
 	
     API.setUserLibraryVersion(r)
+
+	e = API.fetchMyPublications()	
 	
     API.batchDownload(callback)
 
