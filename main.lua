@@ -104,7 +104,7 @@ function ZoteroBrowser:openAttachment(key)
     local full_path, e = ZoteroAPI.downloadAndGetPath(key)
     if e ~= nil or full_path == nil then
         local b = InfoMessage:new{
-            text = _("Could not open file.") .. e,
+            text = _("Could not open file for key ") .. key .. ". " .. e,
             timeout = 5,
             icon = "notice-warning"
         }
@@ -131,6 +131,10 @@ function ZoteroBrowser:onMenuSelect(item)
 		table.insert(self.paths, "Tags/")
 		table.insert(self.keys, "tagList")
 		self:displayTags()
+    elseif item.type == "publications"  then
+		table.insert(self.paths, "My Publications/")
+		table.insert(self.keys, "publications")
+		self:displayMyPublications()
     elseif item.type == "tag"  then
         self:displayTaggedItems(item.text)
     elseif item.type == "item" then
@@ -234,6 +238,12 @@ function ZoteroBrowser:displayTaggedItems(tag)
     local items = ZoteroAPI.getTaggedItems(tag)
 	table.insert(self.paths, tag)
     table.insert(self.keys, "tag")
+    --print(items[1].text)
+    self:setItems(items)
+end
+
+function ZoteroBrowser:displayMyPublications()
+    local items = ZoteroAPI.getMyPublications()
     print(items[1].text)
     self:setItems(items)
 end
@@ -253,6 +263,13 @@ function ZoteroBrowser:displayCollection(collection_id)
 				table.insert(items, 2, {
 					["text"] = _("Tags"),
 					["type"] = "tag_collection",
+					["bold"] = true,
+				})
+			end
+			if ZoteroAPI.publicationsCount() > 0 then
+				table.insert(items, 2, {
+					["text"] = _("My publications"),
+					["type"] = "publications",
 					["bold"] = true,
 				})
 			end

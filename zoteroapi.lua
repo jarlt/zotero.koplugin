@@ -474,6 +474,30 @@ FROM (
 ORDER BY name;
 ]]
 
+-- Get publication items
+local ZOTERO_GET_MY_PUBLICATIONS = [[
+SELECT 
+	key, 
+	name, 
+	type,
+	date 
+FROM (
+	SELECT
+	   items.key,
+--		jsonb_extract(value, '$.data.title') AS title,
+		---- if possible, prepend creator summary
+		coalesce(jsonb_extract(value, '$.meta.creatorSummary') || ' - ', '') || jsonb_extract(value, '$.data.title') AS name,
+		iif(items.itemTypeID = 3, 'attachment', 'item') AS type,
+		jsonb_extract(value, '$.data.date') AS date
+	FROM 
+		itemData INNER JOIN items ON itemData.itemID = items.itemID
+	WHERE
+		itemData.itemID IN (
+			SELECT itemID FROM publicationsItems
+		)
+	)
+ORDER BY date DESC;
+]]
 local ZOTERO_GET_ITEM_VERSION = [[ SELECT version, itemID FROM items WHERE key = ?; ]]
 
 -- Return synced version according to database for item identified by its key. Also return lastest version and itemID 
@@ -1210,7 +1234,7 @@ function API.fetchMyPublications(since, progress_callback)
 
     local headers = API.zoteroHeader
 
-	local page_url = API.userLibraryURL.."/publications/items?format=versions"
+	local page_url = API.userLibraryURL..("/publications/items?format=versions&since=%s"):format(since)
 	--page_url = API.userLibraryURL.."/searches"
 	--print(page_url)
 	local r, e =  API.getZoteroData(page_url)
@@ -1222,9 +1246,13 @@ function API.fetchMyPublications(since, progress_callback)
 			stmt_upsert_publications:reset():bind(key):step()
 			cnt = cnt + 1
 		end
-		print(cnt, "publications.")
+		if cnt > 0 then 
+			logger.info(cnt, "new publications.") 
+		else
+			logger.info("No new publications.")
+		end
 	else
-		print("No publications.")
+		logger.info("No new publications.")
 	end
 	--]]
 end
@@ -1266,7 +1294,7 @@ function API.syncAllItems(progress_callback)
 	
     API.setUserLibraryVersion(r)
 
-	e = API.fetchMyPublications()	
+	e = API.fetchMyPublications(since)	
 	
     API.batchDownload(callback)
 
@@ -1303,6 +1331,9 @@ function API.checkItemData(progressCallBack)
     db:exec("DELETE FROM collectionItems;")
     db:exec("DELETE FROM itemAnnotations;")
     db:exec("DELETE FROM itemAttachments;")
+    db:exec("DELETE FROM itemTags;")
+    db:exec("DELETE FROM tags;")
+    
     local row = stmt:reset():step()
     local item, itemID
     local cnt = 0
@@ -1333,7 +1364,7 @@ function API.checkItemData(progressCallBack)
             annotations[item.key] = item.data.parentItem
         end
         for i, tagInfo in pairs(item.data.tags) do
-            print(itemID, item.key, tagInfo.tag)
+            --print(itemID, item.key, tagInfo.tag)
             stmt_upsert_tag:reset():bind(tagInfo.tag):step()
             stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
         end
@@ -2175,7 +2206,7 @@ function API.getTaggedItems(tag)
     return items
 end
 
--- 
+-- Get total tag count
 function API.tagCount()
     
     local db = API.openDB()
@@ -2184,6 +2215,39 @@ function API.tagCount()
 	return tagCount
 end
 
+function API.publicationsCount()
+    
+    local db = API.openDB()
+    local pubCount = tonumber(db:rowexec([[SELECT COUNT(itemID) FROM publicationsItems;]]))
+    --print("Publication count:", pubCount)
+	return pubCount
+end
+
+-- Get tagged documents
+function API.getMyPublications()
+	local db = API.openDB()
+	print("Getting My Publications")
+    local stmt = db:prepare(ZOTERO_GET_MY_PUBLICATIONS)
+
+    local result, nr = stmt:resultset()
+
+    stmt:close()
+
+    if nr == 0 then
+        return nil
+    end
+
+    local items = {}
+
+    for i=1,nr do
+        table.insert(items, {
+            ["key"] = result[1][i],
+            ["text"] = result[2][i],
+            ["type"] = result[3][i],
+        })
+    end
+    return items
+end
 
 -- Add Zotero document info to sidecar file
 function API.getAttachmentInfo(item)
