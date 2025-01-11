@@ -87,14 +87,16 @@ end
 
 
 function ZoteroBrowser:onReturn()
-	table.remove(self.paths, #self.paths)
+	local path = table.remove(self.paths, #self.paths)
     local key = table.remove(self.keys, #self.keys)
+    local itemmatch = { ["key"] = key }
     if #self.keys == 0 then
-        self:displayCollection(nil)
+        self:displayCollection(nil, itemmatch)
     elseif key == "tag" then
-		self:displayTags()
+		itemmatch = { ["text"] = path }
+		self:displayTags(itemmatch)
     else
-        self:displayCollection(self.keys[#self.keys])
+        self:displayCollection(self.keys[#self.keys], itemmatch)
     end
     return true
 end
@@ -229,9 +231,9 @@ function ZoteroBrowser:displaySearchResults(query)
     self:setItems(items)
 end
 
-function ZoteroBrowser:displayTags()
+function ZoteroBrowser:displayTags(itemmatch)
     local items = ZoteroAPI.getTags()
-    self:setItems(items)
+    self:setItems(items, itemmatch)
 end
 
 function ZoteroBrowser:displayTaggedItems(tag)
@@ -244,11 +246,11 @@ end
 
 function ZoteroBrowser:displayMyPublications()
     local items = ZoteroAPI.getMyPublications()
-    print(items[1].text)
+    --print(items[1].text)
     self:setItems(items)
 end
 
-function ZoteroBrowser:displayCollection(collection_id)
+function ZoteroBrowser:displayCollection(collection_id, itemmatch)
     local items = ZoteroAPI.displayCollection(collection_id)
 
     if collection_id == nil then
@@ -268,7 +270,7 @@ function ZoteroBrowser:displayCollection(collection_id)
 			end
 			if ZoteroAPI.publicationsCount() > 0 then
 				table.insert(items, 2, {
-					["text"] = _("My publications"),
+					["text"] = _("My Publications"),
 					["type"] = "publications",
 					["bold"] = true,
 				})
@@ -277,7 +279,7 @@ function ZoteroBrowser:displayCollection(collection_id)
 	else
 	    items = self:addLabelIfEmpty(items)
 	end
-    self:setItems(items)
+    self:setItems(items, itemmatch)
 end
 
 function ZoteroBrowser:addLabelIfEmpty(items, msg)
@@ -311,12 +313,18 @@ function ZoteroBrowser:zPath()
 	return path
 end
 
-function ZoteroBrowser:setItems(items, subtitle)
+function ZoteroBrowser:setItems(items, itemmatch)
 	local subtitle = self:zPath()
-    self:switchItemTable("Zotero Browser", items, nil, nil, subtitle)
+	--[[
+	if itemmatch ~= nil then
+		local key, value = next(itemmatch)
+		print(key, value)
+	end
+	--]]
+    self:switchItemTable("Zotero Browser", items, nil, itemmatch, subtitle)
 end
 
-local Plugin = WidgetContainer:new{
+local Plugin = WidgetContainer:extend{
     name = "zotero",
     is_doc_only = false
 }

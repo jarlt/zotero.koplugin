@@ -2181,7 +2181,7 @@ end
 -- Get tagged documents
 function API.getTaggedItems(tag)
 	local db = API.openDB()
-	print("Getting tagged items", tag)
+	--print("Getting tagged items", tag)
     local stmt = db:prepare(ZOTERO_GET_TAGGED_ITEMS)
     stmt:reset()
     stmt:bind1(1, tag)
@@ -2226,7 +2226,7 @@ end
 -- Get tagged documents
 function API.getMyPublications()
 	local db = API.openDB()
-	print("Getting My Publications")
+	--print("Getting My Publications")
     local stmt = db:prepare(ZOTERO_GET_MY_PUBLICATIONS)
 
     local result, nr = stmt:resultset()
