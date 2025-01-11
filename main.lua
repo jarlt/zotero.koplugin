@@ -261,18 +261,22 @@ function ZoteroBrowser:displayCollection(collection_id, itemmatch)
 				["text"] = _("All Items"),
 				["type"] = "wildcard_collection"
 			})
-			if ZoteroAPI.tagCount() > 0 then
+			local tagCnt = ZoteroAPI.tagCount()
+			if tagCnt > 0 then
 				table.insert(items, 2, {
 					["text"] = _("Tags"),
 					["type"] = "tag_collection",
 					["bold"] = true,
+					["mandatory"] = tagCnt,
 				})
 			end
-			if ZoteroAPI.publicationsCount() > 0 then
+			local pubCnt = ZoteroAPI.publicationsCount()
+			if pubCnt > 0 then
 				table.insert(items, 2, {
 					["text"] = _("My Publications"),
 					["type"] = "publications",
 					["bold"] = true,
+					["mandatory"] = pubCnt,
 				})
 			end
 		end

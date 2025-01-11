@@ -1056,6 +1056,8 @@ function API.fetchZoteroItems(since, progress_callback)
 
     local stmt_upsert_tag = db:prepare(ZOTERO_UPSERT_TAG)
     local stmt_upsert_item_tag = db:prepare(ZOTERO_UPSERT_ITEM_TAGS)
+
+    local stmt_upsert_publications = db:prepare(ZOTERO_UPSERT_PUBLICATIONS)
 	
     local headers = API.zoteroHeader
     
@@ -1111,6 +1113,18 @@ function API.fetchZoteroItems(since, progress_callback)
 						and table_contains(annotationTypes, item.data.annotationType)) then
 					annotations[key] = item.data.parentItem
 				end
+				-- Check if it is part of 'My Publications'
+				if item.data.inPublications then
+					if item.data.itemType == 'attachment' then
+						if item.data.parentItem == nil then
+							-- only insert attachment if it does not have a parent item. Probably shoud never happen...
+							stmt_upsert_publications:reset():bind(item.key):step()
+						end
+					else
+						stmt_upsert_publications:reset():bind(item.key):step()		
+					end
+				end
+				-- Check tags
 				local res = stmt_get_ItemVersion:reset():bind(key):step()
 				local itemID = tonumber(res[2])
 				for i, tagInfo in pairs(item.data.tags) do
@@ -1294,7 +1308,8 @@ function API.syncAllItems(progress_callback)
 	
     API.setUserLibraryVersion(r)
 
-	e = API.fetchMyPublications(since)	
+	-- not really needed; this info is already part of the item data...
+	--e = API.fetchMyPublications(since)	
 	
     API.batchDownload(callback)
 
@@ -1322,6 +1337,8 @@ function API.checkItemData(progressCallBack)
     local stmt_changes = db:prepare(ZOTERO_DB_CHANGES)
     local stmt_upsert_tag = db:prepare(ZOTERO_UPSERT_TAG)
     local stmt_upsert_item_tag = db:prepare(ZOTERO_UPSERT_ITEM_TAGS)
+    
+    local stmt_upsert_publications = db:prepare(ZOTERO_UPSERT_PUBLICATIONS)
 	
     local attachments = {}
     local annotations = {}
@@ -1333,6 +1350,7 @@ function API.checkItemData(progressCallBack)
     db:exec("DELETE FROM itemAttachments;")
     db:exec("DELETE FROM itemTags;")
     db:exec("DELETE FROM tags;")
+    db:exec("DELETE FROM publicationsItems;")
     
     local row = stmt:reset():step()
     local item, itemID
@@ -1363,6 +1381,18 @@ function API.checkItemData(progressCallBack)
                 and table_contains(annotationTypes, item.data.annotationType)) then
             annotations[item.key] = item.data.parentItem
         end
+        -- Check if it is part of 'My Publications'
+        if item.data.inPublications then
+			if item.data.itemType == 'attachment' then
+				if item.data.parentItem == nil then
+					-- only insert attachment if it does not have a parent item. Probably shoud never happen...
+					stmt_upsert_publications:reset():bind(item.key):step()
+				end
+			else
+				stmt_upsert_publications:reset():bind(item.key):step()		
+			end
+		end
+        -- Check tags
         for i, tagInfo in pairs(item.data.tags) do
             --print(itemID, item.key, tagInfo.tag)
             stmt_upsert_tag:reset():bind(tagInfo.tag):step()
