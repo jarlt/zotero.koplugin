@@ -34,7 +34,7 @@ local SUPPORTED_MEDIA_TYPES = {
 local ZOTERO_BASE_URL = "https://api.zotero.org"
 
 -- Update whenever the database scheme is updated/changed
-local db_version = 1
+local db_version = 2
 
 local ZOTERO_DB_SCHEMA = [[
 CREATE TABLE IF NOT EXISTS itemData (
@@ -634,7 +634,8 @@ function API.openDB()
 		--API.db:exec(ZOTERO_CREATE_VIEWS)
 		API.db:exec("PRAGMA foreign_keys=ON")
 		--logger.info("Zotero: db opened with foreign keys enabled: ", tonumber(unpack(API.db:exec("PRAGMA foreign_keys")[1])))
-		if API.getDatabaseVersion() == 0 then
+		local dbVersion = API.getDatabaseVersion()
+		if dbVersion == 0 then
 			logger.info("Zotero: db version is 0. Set up tables.")
 			API.db:exec(ZOTERO_DB_SCHEMA)
 			API.db:exec(ZOTERO_DB_SCHEMA_EXTRAS_V2)
@@ -658,7 +659,12 @@ function API.openDB()
 			-- Create index for item keys
 			API.db:exec(ZOTERO_CREATE_ITEMKEY_INDEX)
 			API.setDatabaseVersion(db_version)
-		else
+		elseif dbVersion == 1 then
+			API.db:exec(ZOTERO_DB_SCHEMA_EXTRAS_V2)
+			API.setDatabaseVersion(db_version)		
+			logger.info("Zotero: Upgraded database to version 2.")
+		end
+		if dbVersion > 0 then
 			API.getUserLibraryVersion()
 			logger.info("Zotero: Local db version: "..API.libVersion)
 		end
