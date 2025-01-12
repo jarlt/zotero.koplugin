@@ -172,6 +172,26 @@ function itemInfo:show(itemDetails, attachment_callback)
 		end
     end
 
+	-- Deal with notes
+	local notes = itemDetails.notes
+	if notes ~= nil then
+	    --print(notes[1].note)
+	    if sep == 0 then
+		    table.insert(kv_pairs, "--")
+		    sep = sep + 1
+	    end
+	    for i, v in ipairs(notes) do
+		local note = util.htmlToPlainTextIfHtml(v.note)
+		local callback = function() -- proper text_type in TextViewer
+			self:showBookProp("note"..i, note)
+		end
+		key_text = "Note " .. i .. ": "
+		table.insert(kv_pairs, { key_text, note,
+			callback = callback
+		})
+	    end
+	end
+
 	-- Deal with abstract
 	local abstract = itemData.abstractNote
 	if abstract ~= "" then
@@ -189,7 +209,7 @@ function itemInfo:show(itemDetails, attachment_callback)
 		table.insert(kv_pairs, { key_text, abstract,
 			callback = callback, separator = true
 		})
-    else
+	else
 		-- Separator
 		table.insert(kv_pairs, "--")
 	end

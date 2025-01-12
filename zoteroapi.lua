@@ -407,6 +407,13 @@ WHERE
 --ORDER BY is_pdf DESC, filename ASC;
 ]]
 
+local ZOTERO_GET_ITEM_NOTES = [[
+SELECT
+	title,
+	note
+FROM (itemNotes INNER JOIN items ON itemNotes.parentItemID = items.itemID)  
+WHERE key = ?1;
+]]
 local ZOTERO_GET_ITEM_ANNOTATIONS_INFO = [[
 SELECT
 	key,
@@ -432,6 +439,10 @@ INSERT INTO itemAnnotations(itemID, parentItemID) SELECT i.itemID, p.itemID FROM
 ON CONFLICT DO UPDATE SET parentItemID = excluded.parentItemID;
 ]]
 
+local ZOTERO_UPSERT_ITEM_NOTES = [[
+INSERT INTO itemNotes(itemID, parentItemID, title, note) SELECT i.itemID, p.itemID, ?3, ?4 FROM items i, items p WHERE i.key = ?1 AND p.key=?2;
+]]
+	
 local ZOTERO_UPSERT_TAG = [[
 INSERT INTO tags(name) VALUES(?)
 ON CONFLICT DO NOTHING;
@@ -1037,6 +1048,17 @@ function API.setAnnotations(annotations)
 end
 
 
+-- Add/update notes to itemNotes db table
+-- Input is a table of containing item.key and itemdata pairs
+function API.setNotes(notes)
+    local db = API.openDB()
+	local stmt_upsert_notes = db:prepare(ZOTERO_UPSERT_ITEM_NOTES)
+	for item, data in pairs(notes) do
+		stmt_upsert_notes:reset():bind(item, data.parentItem, data.title, data.note):step()
+	end
+	stmt_upsert_notes:close()
+end
+
 -- Fetch (new) items from Zotero server and organise them into the local sqlite database
 function API.fetchZoteroItems(since, progress_callback)
     
@@ -1236,6 +1258,7 @@ function API.fetchZoteroCollections(since, progress_callback)
 end
 
 -- Fetch my publications from Zotero server
+-- Turns out this is not really needed as all the info is already in the item data...
 function API.fetchMyPublications(since, progress_callback)
 	----[[
 	local callback = progress_callback or function() end
@@ -1342,12 +1365,11 @@ function API.checkItemData(progressCallBack)
 	
     local attachments = {}
     local annotations = {}
+    local notes = {}
 	
 	local annotationTypes = Annotations.supportedZoteroTypes()
 
     db:exec("DELETE FROM collectionItems;")
-    db:exec("DELETE FROM itemAnnotations;")
-    db:exec("DELETE FROM itemAttachments;")
     db:exec("DELETE FROM itemTags;")
     db:exec("DELETE FROM tags;")
     db:exec("DELETE FROM publicationsItems;")
@@ -1380,6 +1402,8 @@ function API.checkItemData(progressCallBack)
         elseif (item.data.itemType == 'annotation' 
                 and table_contains(annotationTypes, item.data.annotationType)) then
             annotations[item.key] = item.data.parentItem
+        elseif item.data.itemType == 'note' then
+            notes[item.key] = item.data
         end
         -- Check if it is part of 'My Publications'
         if item.data.inPublications then
@@ -1405,14 +1429,21 @@ function API.checkItemData(progressCallBack)
         row = stmt:step(row)
     end
     stmt:close()
+    
     if progressCallBack then
 		progressCallBack(string.format("Cataloguing attachments"))
 	end
-	API.setItemAttachments(attachments)
+    db:exec("DELETE FROM itemAttachments;")
+ 	API.setItemAttachments(attachments)
+ 	
 	if progressCallBack then
 		progressCallBack(string.format("Cataloguing annotations"))
 	end
+    db:exec("DELETE FROM itemAnnotations;")
 	API.setAnnotations(annotations)
+	
+    db:exec("DELETE FROM itemNotes;")
+	API.setNotes(notes)
 end
     
 function API.getDirAndPath(item)
@@ -1476,7 +1507,24 @@ function API.getItemWithAttachments(key)
 		end
 		-- add an attachments field to item:
 		item.attachments = attachments
+
+		-- check notes as well
+		local stmtNotes = db:prepare(ZOTERO_GET_ITEM_NOTES)
+		stmtNotes:bind1(1, key)
+
+		result, nr = stmtNotes:resultset()
+		stmtNotes:close()
+
+		local notes = {}
+
+		for i=1,nr do
+				local note = { title = result[1][i], note = result[2][i] }
+				table.insert(notes, note )
+		end
+		-- add an attachments field to item:
+		item.notes = notes
     end
+    --print(JSON.encode(item.notes))
 	stmt:close()
 	--print(JSON.encode(item))
     return item
