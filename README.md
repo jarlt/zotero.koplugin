@@ -50,10 +50,10 @@ If it is not yet available locally (or out of date) it will **download** it from
 When opening an item from the Zotero Browser it will also check its Zotero annotations (according to the local database) and attach supported annotations to the item.
 
 You can also **long-press** on items. The action depends on what type of item is selected:
-- Collection: Show a dialog which allows you to set this collection as an offline collection.
-- Item: Show a list of *all* (supported) attachments of this item
+- **Collection:** Show a dialog which allows you to set this collection as an offline collection.
+- **Item:** Show detailed information about the item: apart from the standard bibliographical info it also lists 'tags' and the 'abstract' (if available on zotero. It also lists *all* (supported) attachments of this item, so you can use this view to open a specific attachment.
 
-You can **search** the databse by clicking on the magnifying glass icon in the top left corner.
+You can **search** the database by clicking on the magnifying glass icon in the top left corner.
 
 **Note:** you can associate this 'Browse' action with a gesture by going to
 'Top Menu -> Settings (cogwheel) -> Taps and gestures -> Gesture manager'
@@ -113,7 +113,7 @@ return {
 ```
 ### Misc
 
-In it's default configuration KOReader seems to open a dialog asking whether to write annotations into the pdf file. Do *not* write annotation to the file. The plugin automatically disables this dialog for files opened rom the Zotero Browser. This setting can be modified in the Zotero plugin settings.
+In it's default configuration KOReader seems to open a dialog asking whether to write annotations into the pdf file. Do *not* write annotation to the file. The plugin automatically disables this dialog for files opened from the Zotero Browser. This setting can be modified in the Zotero plugin settings.
 
 Alternatively, you can disable this for all files by going to
 'Top Menu -> Settings (cogwheel) -> Document -> Save document (write highlights into PDF)' and ticking 'Disable'
