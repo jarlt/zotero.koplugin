@@ -22,7 +22,7 @@ local DocSettings = require("docsettings")
 -- /storage/<KEY>/version: Version number of downloaded attachment
 -- /meta.lua: Metadata containing library version, items etc.
 
-local API = { ["version"] = "JA-JD v1.1 RC1" } -- TODO: Update before release version
+local API = { ["version"] = "JA-JD v1.1 dev" } -- TODO: Update before release version
 
 local SUPPORTED_MEDIA_TYPES = {
     [1] = "application/pdf",
@@ -1918,9 +1918,12 @@ function API.syncAnnotations(progress_callback)
                         stmt_delete:close()
                     end
 
-                    -- Create new annotations
-                    local fails, e = Annotations.createAnnotations(file_path, key, API.createItems)
-
+                    local fails, e = 0, nil
+                    if #sdr_annotations > 0 then
+                        -- Check if new annotations need to be created/send to Zotero
+                        fails, e = Annotations.createAnnotations(file_path, key, API.createItems)
+                    end
+                    
                     -- Accumulate errors
                     total_upload_fails = total_upload_fails + fails
                     total_delete_fails = total_delete_fails + delete_fails

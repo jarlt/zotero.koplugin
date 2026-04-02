@@ -474,7 +474,7 @@ function Annotations.createAnnotations(file_path, key, creation_callback)
         or #doc_settings.data["annotations"] == 0
     then
         logger.info("Annotations.createAnnotations: No annotations to create")
-        return
+        return 0, nil
     end
 
     local k_annotations = doc_settings.data["annotations"]
@@ -499,13 +499,13 @@ function Annotations.createAnnotations(file_path, key, creation_callback)
     local page_dimensions = Annotations.getPageDimensions(file_path, pages)
 
     if page_dimensions == nil then
-        logger.err(
+        logger.warn(
             ("Zotero: Skipping '%s' because page dimensions can not be determined. relevant pages where %s"):format(
                 file_path,
                 JSON.encode(pages)
             )
         )
-        return nil
+        return #z_annotations, nil
     end
 
     logger.info("Annotations.createAnnotations: Processing " .. #k_annotations .. " annotations")
