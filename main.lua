@@ -113,25 +113,41 @@ function ZoteroBrowser:onReturn()
 end
 
 function ZoteroBrowser:openAttachment(key)
-    NetworkMgr:runWhenOnline(function()
-        local full_path, e = ZoteroAPI.downloadAndGetPath(key)
-        if e ~= nil or full_path == nil then
-            local b = InfoMessage:new({
-                text = _("Could not open file.") .. e,
-                timeout = 5,
-                icon = "notice-warning",
-            })
-            UIManager:show(b)
+	local item, fileStatus, e = ZoteroAPI.checkLocalAttachmentFileExists(key)
+	local targetDir, full_path
+    if e ~= nil or item == nil then
+		local b = InfoMessage:new({
+			text = _("Could not open file.") .. e,
+			timeout = 5,
+			icon = "notice-warning",
+		})
+		UIManager:show(b)
+	else
+        targetDir, full_path = ZoteroAPI.getDirAndPath(item)
+        if fileStatus < 2 then  -- file needs downloading
+            NetworkMgr:runWhenOnline(function()
+                local full_path, e = ZoteroAPI.downloadAttachment(item, full_path)
+                if e ~= nil or full_path == nil then
+                    local b = InfoMessage:new({
+                        text = _("Could not download file.") .. e,
+                        timeout = 5,
+                        icon = "notice-warning",
+                    })
+                    UIManager:show(b)
+                end
+            end)
         else
-            assert(full_path ~= nil)
-            UIManager:close(self.download_dialog)
-            configureZoteroDocumentSettings(full_path)
-
-            local ReaderUI = require("apps/reader/readerui")
-            self.close_callback()
-            ReaderUI:showReader(full_path)
+            -- Check whether there are any annotations that need to be attached and save library version to sdr file
+            ZoteroAPI.attachItemAnnotations(item)
         end
-    end)
+    end
+	if full_path and lfs.attributes(full_path) then 
+		UIManager:close(self.download_dialog)
+		configureZoteroDocumentSettings(full_path)
+		local ReaderUI = require("apps/reader/readerui")
+		self.close_callback()
+		ReaderUI:showReader(full_path)
+	end
 end
 
 function ZoteroBrowser:onMenuSelect(item)
@@ -150,7 +166,6 @@ function ZoteroBrowser:onMenuSelect(item)
             icon = "notice-info",
         })
         UIManager:scheduleIn(0.05, function()
-            NetworkMgr:runWhenOnline(function()
                 local attachments = ZoteroAPI.getItemAttachments(item.key)
                 if attachments == nil or table_empty(attachments) then
                     local b = InfoMessage:new({
@@ -178,7 +193,6 @@ function ZoteroBrowser:onMenuSelect(item)
                         self:openAttachment(attachments[#attachments].key)
                     end
                 end
-            end)
         end)
         UIManager:show(self.download_dialog)
     elseif item.type == "attachment" then
@@ -196,23 +210,7 @@ function ZoteroBrowser:onMenuHold(item)
         local itemDetails = ZoteroAPI.getItemWithAttachments(item.key)
         local itemInfo = itemInfoViewer:new()
         itemInfo:show(itemDetails, function(key)
-            NetworkMgr:runWhenOnline(function()
-                local full_path, e = ZoteroAPI.downloadAndGetPath(key)
-                if e ~= nil or full_path == nil then
-                    local b = InfoMessage:new({
-                        text = _("Could not open file.") .. e,
-                        timeout = 5,
-                        icon = "notice-warning",
-                    })
-                    UIManager:show(b)
-                else
-                    assert(full_path ~= nil)
-                    configureZoteroDocumentSettings(full_path)
-                    local ReaderUI = require("apps/reader/readerui")
-                    self.close_callback()
-                    ReaderUI:showReader(full_path)
-                end
-            end)
+            self:openAttachment(key)
         end)
     elseif item.type == "collection" then
         local is_offline_enabled = ZoteroAPI.isOfflineCollection(item.key)

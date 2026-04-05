@@ -1459,30 +1459,30 @@ function API.getItemAttachments(key)
     return items
 end
 
--- Downloads an attachment file to the correct directory and returns the path.
--- If the local version is up to date, no network request is made.
--- Before the download, the download_callback is called.
--- Returns tuple with path and error, if path is correct then error is nil.
-function API.downloadAndGetPath(key, download_callback)
+-- Check if an attachment item already exists locally, and if it is up to date.
+-- No network request is made, this is based on the current version of the local database.
+-- Returns tuple with item, fileStatus and error.
+-- fileStatus: 0 : no local copy, 1 : local copy needs updating, 2 : local copy up-to-date
+function API.checkLocalAttachmentFileExists(key)
     local e = API.verifyZoteroAccess()
     if e ~= nil then
-        return nil, e
+        return nil, 0, e
     end
 
     local item = API.getItem(key)
     if item == nil then
-        return nil, "Error: the requested file can not be found in the database"
+        return nil, 0, "Error: the requested file can not be found in the database"
     end
 
     if item.data.itemType ~= "attachment" then
-        return nil, "Error: this item is not an attachment"
+        return nil, 0, "Error: this item is not an attachment"
     elseif item.data.linkMode ~= "imported_file" and item.data.linkMode ~= "imported_url" then
-        return nil, "Error: this item is not a stored attachment"
+        return nil, 0, "Error: this item is not a stored attachment"
     elseif table_contains(SUPPORTED_MEDIA_TYPES, item.data.contentType) == false then
-        return nil, "Error: this item has an unsupported content type (" .. item.data.contentType .. ")"
+        return nil, 0, "Error: this item has an unsupported content type (" .. item.data.contentType .. ")"
     end
 
-    local downloadRequired = true
+    local fileStatus = 0
 
     API.getAttachmentInfo(item)
 
@@ -1495,7 +1495,7 @@ function API.downloadAndGetPath(key, download_callback)
         docSettings:close()
         -- check what the database expected to find (can be out-of date for many reasons...)
         local local_version, lastSync, itemVersion, itemID = API.getAttachmentVersion(key)
-        logger.info(
+        logger.dbg(
             "Zotero: ItemID:",
             itemID,
             ", local item:",
@@ -1508,58 +1508,83 @@ function API.downloadAndGetPath(key, download_callback)
             itemVersion
         )
         if libVersionAtLastSync >= item.version then
-            logger.dbg("Zotero: Up-to-date local file. No need for download.")
-            downloadRequired = false
+            logger.info("Zotero: Attachment " .. key .. " -> Up-to-date local file.")
+            fileStatus = 2
+        else
+            fileStatus = 1
         end
-    else -- file does not exist, so make sure the folder is there...
-        lfs.mkdir(targetDir)
+    end
+    return item, fileStatus, nil
+end
+
+-- Downloads an attachment file to the correct directory and returns the path.
+-- Before the download, the download_callback is called.
+-- Returns tuple with path and error, if path is correct then error is nil.
+function API.downloadAttachment(item, targetPath, download_callback)
+
+    local key = item.key
+    local targetDir, targetPath = API.getDirAndPath(item)
+    -- Make sure the folder is there...
+    lfs.mkdir(targetDir)
+
+    if download_callback ~= nil then
+        download_callback()
     end
 
-    if downloadRequired then
-        if download_callback ~= nil then
-            download_callback()
-        end
+    local errormsg
+    logger.info("Zotero: Attachment " .. key .. " -> Downloading file...")
+    if API.settings:isTrue("webdav_enabled") then
+        local result
+        result, errormsg = API.downloadWebDAV(key, targetDir, targetPath)
+    else
+        local url = API.userLibraryURL .. "/items/" .. key .. "/file"
+        logger.dbg("Zotero: fetching " .. url)
 
-        local errormsg
-        logger.info("Zotero: Downloading attachment file")
-        if API.settings:isTrue("webdav_enabled") then
-            local result
-            result, errormsg = API.downloadWebDAV(key, targetDir, targetPath)
-        else
-            local url = API.userLibraryURL .. "/items/" .. key .. "/file"
-            logger.dbg("Zotero: fetching " .. url)
+        local r, c, h = https.request({
+            url = url,
+            headers = API.zoteroHeader,
+            sink = ltn12.sink.file(io.open(targetPath, "wb")),
+        })
 
-            local r, c, h = https.request({
-                url = url,
-                headers = API.zoteroHeader,
-                sink = ltn12.sink.file(io.open(targetPath, "wb")),
-            })
-
-            errormsg = API.verifyResponse(r, c)
-        end
-        if errormsg then
-            if file_ts then
-                logger.warn("Zotero: Failed to download updated attachtment version. Using local copy!")
-            else
-                logger.warn("Zotero: Failed to download attachtment")
-                return nil, errormsg
-            end
-        end
+        errormsg = API.verifyResponse(r, c)
+    end
+    if errormsg then
+        logger.warn("Zotero: Failed to download attachment")
+        return nil, errormsg
+    else
         -- Make sure libVersion is added to metadata for non-pdf files...
         if item.data.contentType ~= SUPPORTED_MEDIA_TYPES[1] then
             local docSettings = DocSettings:open(targetPath)
             docSettings:saveSetting("zoteroLibVersion", API.getUserLibraryVersion())
             docSettings:flush()
         end
+
+        -- Check whether there are any annotations that need to be attached and save library version to sdr file
+        API.attachItemAnnotations(item)
+
+        -- Update local db with synced item version number
+        API.setAttachmentVersionByKey(key, item.version)
+        return targetPath, nil
     end
+end
 
-    -- Check whether there are any annotations that need to be attached and save library version to sdr file
-    API.attachItemAnnotations(item)
-
-    -- Update local db with synced item version number
-    API.setAttachmentVersionByKey(key, item.version)
-
-    return targetPath, nil
+-- Downloads an attachment file to the correct directory and returns the path.
+-- If the local version is up to date, no network request is made.
+-- Before the download, the download_callback is called.
+-- Returns tuple with path and error, if path is correct then error is nil.
+function API.downloadAndGetPath(key, download_callback)
+	local item, fileStatus, e = API.checkLocalAttachmentFileExists(key)
+	local targetDir, full_path
+    if e == nil then
+        targetDir, full_path = API.getDirAndPath(item)
+        if fileStatus < 2 then  -- file needs downloading
+            full_path, e = API.downloadAttachment(item, full_path)
+        else
+            -- Check whether there are any annotations that need to be attached and save library version to sdr file
+            API.attachItemAnnotations(item)
+        end
+    end
+    return full_path, e
 end
 
 function API.downloadWebDAV(key, targetDir, targetPath)
@@ -2280,7 +2305,7 @@ function API.attachItemAnnotations(item, annotation_callback)
     if zotCount > 0 then
         -- Find all the annotations that KOReader knows about from DocSettings
         local koreaderAnnotations = docSettings:readSetting("annotations", {})
-        print(#koreaderAnnotations .. " KOReader Annotations. ")
+        --print(#koreaderAnnotations .. " KOReader Annotations. ")
 
         local localZotAnn = {}
         -- If there are locally stored KOReader annotations, check them to identify Zotero annotations
