@@ -876,7 +876,6 @@ function API.verifyZoteroAccess()
         elseif api_key == "" then
             return "Error: must set API Key"
         end
-        API.zoteroAcessVerified = true
         -- generate the headers we will need
         API.zoteroHeader = {
             ["zotero-api-key"] = api_key,
@@ -889,6 +888,8 @@ function API.verifyZoteroAccess()
         local access, e = API.checkZoteroKey(key_url, headers)
         if access == nil then
             return e
+        else
+            API.zoteroAcessVerified = true
         end
     end
     return nil
@@ -1463,12 +1464,7 @@ end
 -- No network request is made, this is based on the current version of the local database.
 -- Returns tuple with item, fileStatus and error.
 -- fileStatus: 0 : no local copy, 1 : local copy needs updating, 2 : local copy up-to-date
-function API.checkLocalAttachmentFileExists(key)
-    local e = API.verifyZoteroAccess()
-    if e ~= nil then
-        return nil, 0, e
-    end
-
+function API.checkAttachmentStatus(key)
     local item = API.getItem(key)
     if item == nil then
         return nil, 0, "Error: the requested file can not be found in the database"
@@ -1521,6 +1517,10 @@ end
 -- Before the download, the download_callback is called.
 -- Returns tuple with path and error, if path is correct then error is nil.
 function API.downloadAttachment(item, targetPath, download_callback)
+    local e = API.verifyZoteroAccess()
+    if e ~= nil then
+        return nil, 0, e
+    end
 
     local key = item.key
     local targetDir, targetPath = API.getDirAndPath(item)
@@ -1573,7 +1573,7 @@ end
 -- Before the download, the download_callback is called.
 -- Returns tuple with path and error, if path is correct then error is nil.
 function API.downloadAndGetPath(key, download_callback)
-	local item, fileStatus, e = API.checkLocalAttachmentFileExists(key)
+	local item, fileStatus, e = API.checkAttachmentStatus(key)
 	local targetDir, full_path
     if e == nil then
         targetDir, full_path = API.getDirAndPath(item)

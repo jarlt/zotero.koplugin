@@ -113,7 +113,7 @@ function ZoteroBrowser:onReturn()
 end
 
 function ZoteroBrowser:openAttachment(key)
-	local item, fileStatus, e = ZoteroAPI.checkLocalAttachmentFileExists(key)
+	local item, fileStatus, e = ZoteroAPI.checkAttachmentStatus(key)
 	local targetDir, full_path
     if e ~= nil or item == nil then
 		local b = InfoMessage:new({
