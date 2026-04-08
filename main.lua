@@ -141,6 +141,7 @@ function ZoteroBrowser:openAttachment(key)
             ZoteroAPI.attachItemAnnotations(item)
         end
     end
+    --logger.info("Zotero:openAttachment path: " .. full_path)
 	if full_path and lfs.attributes(full_path) then 
 		UIManager:close(self.download_dialog)
 		configureZoteroDocumentSettings(full_path)

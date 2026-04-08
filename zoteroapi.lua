@@ -562,8 +562,8 @@ function API.init(zotero_dir)
     if not file_exists(API.storage_dir) then
         lfs.mkdir(API.storage_dir)
     end
-
-    logger.dbg("Zotero: storage dir" .. API.storage_dir)
+    --logger:setLevel(logger.levels.dbg)
+    logger.dbg("Zotero: storage dir: " .. API.storage_dir)
 
     API.db_path = BaseUtil.joinPath(API.zotero_dir, "zotero.db")
     logger.info("Zotero: opening db path ", API.db_path)
@@ -1480,8 +1480,6 @@ function API.checkAttachmentStatus(key)
 
     local fileStatus = 0
 
-    API.getAttachmentInfo(item)
-
     local targetDir, targetPath = API.getDirAndPath(item)
     local file_ts = lfs.attributes(targetPath, "modification")
     if file_ts then -- file already exists locally
@@ -1552,6 +1550,14 @@ function API.downloadAttachment(item, targetPath, download_callback)
         logger.warn("Zotero: Failed to download attachment")
         return nil, errormsg
     else
+        -- Add item info to sidecar file
+        if pcall(API.getAttachmentInfo, item) then
+            -- no errors
+            logger.info("Zotero: updated sdr file with metadata")
+        else
+            logger.warn("Zotero: Failed to update sdr file with metadata.")
+        end
+        
         -- Make sure libVersion is added to metadata for non-pdf files...
         if item.data.contentType ~= SUPPORTED_MEDIA_TYPES[1] then
             local docSettings = DocSettings:open(targetPath)
@@ -2232,7 +2238,7 @@ function API.getAttachmentInfo(item)
             local authors = {}
             for _, v in ipairs(parent.data.creators) do
                 if v.creatorType == "author" then
-                    table.insert(authors, v.firstName .. " " .. v.lastName)
+                    table.insert(authors, (v.firstName or "") .. " " .. (v.lastName or ""))
                 end
             end
             -- use \n to separate items, as KOReader seems to then split them up properly
