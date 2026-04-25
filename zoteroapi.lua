@@ -960,36 +960,38 @@ function API.fetchZoteroItems(since, progress_callback)
     )
 
     -- First, check for deleted items using the dedicated /deleted endpoint
-    local deleted_url = API.userLibraryURL .. ("/deleted?since=%s"):format(since)
-    logger.info("Zotero: Requesting deleted items URL: " .. deleted_url)
+    if since > 0 then -- not needed on first sync
+        local deleted_url = API.userLibraryURL .. ("/deleted?since=%s"):format(since)
+        logger.info("Zotero: Requesting deleted items URL: " .. deleted_url)
 
-    local deleted_data, deleted_error = API.getZoteroData(deleted_url)
-    if deleted_data ~= nil then
-        logger.info("Zotero: Found deleted data: " .. JSON.encode(deleted_data))
+        local deleted_data, deleted_error = API.getZoteroData(deleted_url)
+        if deleted_data ~= nil then
+            logger.info("Zotero: Found deleted data: " .. JSON.encode(deleted_data))
 
-        -- Process deleted items
-        if deleted_data.items then
-            for _, deleted_key in ipairs(deleted_data.items) do
-                logger.info("Zotero: Processing deleted item: " .. deleted_key)
-                local res = stmt_get_ItemVersion:reset():bind(deleted_key):step()
-                if res ~= nil then
-                    logger.info("Zotero: Deleting item from local database: " .. deleted_key)
-                    stmt_delete_item:reset():bind(deleted_key):step()
+            -- Process deleted items
+            if deleted_data.items then
+                for _, deleted_key in ipairs(deleted_data.items) do
+                    logger.info("Zotero: Processing deleted item: " .. deleted_key)
+                    local res = stmt_get_ItemVersion:reset():bind(deleted_key):step()
+                    if res ~= nil then
+                        logger.info("Zotero: Deleting item from local database: " .. deleted_key)
+                        stmt_delete_item:reset():bind(deleted_key):step()
+                    end
                 end
             end
-        end
 
-        -- Process deleted collections
-        if deleted_data.collections then
-            local stmt_delete_collection = db:prepare(ZOTERO_DB_DELETE_COLLECTION)
-            for _, deleted_key in ipairs(deleted_data.collections) do
-                logger.info("Zotero: Processing deleted collection: " .. deleted_key)
-                stmt_delete_collection:reset():bind(deleted_key):step()
+            -- Process deleted collections
+            if deleted_data.collections then
+                local stmt_delete_collection = db:prepare(ZOTERO_DB_DELETE_COLLECTION)
+                for _, deleted_key in ipairs(deleted_data.collections) do
+                    logger.info("Zotero: Processing deleted collection: " .. deleted_key)
+                    stmt_delete_collection:reset():bind(deleted_key):step()
+                end
+                stmt_delete_collection:close()
             end
-            stmt_delete_collection:close()
+        elseif deleted_error then
+            logger.warn("Zotero: Error fetching deleted items: " .. deleted_error)
         end
-    elseif deleted_error then
-        logger.warn("Zotero: Error fetching deleted items: " .. deleted_error)
     end
 
     -- Now fetch regular items (without includeTrashed since we handled deletions above)
