@@ -3,6 +3,9 @@ local DocSettings = require("docsettings")
 local JSON = require("json")
 local logger = require("logger")
 
+-- Set debug level for this plugin; 
+local zot_dbg_lvl = 1
+
 local Z2K_COLORS = {
     ["#ffd400"] = "yellow",
     ["#ff6666"] = "red",
@@ -61,9 +64,10 @@ function Annotations.getPageDimensions(file, pages)
         logger.warn("Annotations.getPageDimensions: pages parameter is nil or invalid")
         return {}
     end
-
-    logger.info("Annotations.getPageDimensions: Getting BBOX data for file: " .. file)
-    logger.info("Annotations.getPageDimensions: Pages requested: " .. JSON.encode(pages))
+    if zot_dbg_lvl > 1 then
+        logger.info("Annotations.getPageDimensions: Getting BBOX data for file: " .. file)
+        logger.info("Annotations.getPageDimensions: Pages requested: " .. JSON.encode(pages))
+    end
 
     local result = {}
 
@@ -77,7 +81,9 @@ function Annotations.getPageDimensions(file, pages)
     end
 
     for pageno, _ in pairs(pages) do
-        logger.info("Annotations.getPageDimensions: Processing page " .. pageno)
+        if zot_dbg_lvl > 2 then
+            logger.info("Annotations.getPageDimensions: Processing page " .. pageno)
+        end
 
         -- Get native page dimensions
         local page_dims = doc:getNativePageDimensions(pageno)
@@ -110,18 +116,20 @@ function Annotations.getPageDimensions(file, pages)
             bbox_width = bbox_width,
             bbox_height = bbox_height,
         }
-
-        logger.info(string.format(
-            "Annotations.getPageDimensions: Page %d - Full: %.2fx%.2f, BBox: [%.2f,%.2f,%.2f,%.2f], BBox Size: %.2fx%.2f",
-            pageno, page_dims.w, page_dims.h,
-            bbox.x0, bbox.y0, bbox.x1, bbox.y1,
-            bbox_width, bbox_height
-        ))
+        if zot_dbg_lvl > 2 then
+            logger.info(string.format(
+                "Annotations.getPageDimensions: Page %d - Full: %.2fx%.2f, BBox: [%.2f,%.2f,%.2f,%.2f], BBox Size: %.2fx%.2f",
+                pageno, page_dims.w, page_dims.h,
+                bbox.x0, bbox.y0, bbox.x1, bbox.y1,
+                bbox_width, bbox_height
+            ))
+        end
     end
 
     doc:close()
-    logger.info("Annotations.getPageDimensions: Completed, returning data for " .. table.getn(result) .. " pages")
-
+        if zot_dbg_lvl > 1 then
+            logger.info("Annotations.getPageDimensions: Completed, returning data for " .. table.getn(result) .. " pages")
+        end
     return result
 end
 
@@ -315,17 +323,19 @@ end
 -- NOTE: currently only works with text highlights and annotations.
 -- page_bbox: table with bbox info for this specific page (from getPageDimensions)
 function Annotations.convertZoteroToKOReader(annotation, page_bbox)
-    logger.info("=== CONVERTING ANNOTATION FROM ZOTERO ===")
-    logger.info("Raw Zotero annotation data:")
-    logger.info("  Key: " .. (annotation.key or "nil"))
-    logger.info("  Version: " .. (annotation.version or "nil"))
-    logger.info("  Annotation Type: " .. (annotation.data.annotationType or "nil"))
-    logger.info("  Annotation Color: " .. (annotation.data.annotationColor or "nil"))
-    logger.info("  Annotation Text: " .. (annotation.data.annotationText or "nil"))
-    logger.info("  Annotation Comment: " .. (annotation.data.annotationComment or ""))
-    logger.info("  Date Modified: " .. (annotation.data.dateModified or "nil"))
-    logger.info("  Sort Index: " .. (annotation.data.annotationSortIndex or "nil"))
-    logger.info("  Annotation Position JSON: " .. (annotation.data.annotationPosition or "nil"))
+    if zot_dbg_lvl > 2 then
+        logger.info("=== CONVERTING ANNOTATION FROM ZOTERO ===")
+        logger.info("Raw Zotero annotation data:")
+        logger.info("  Key: " .. (annotation.key or "nil"))
+        logger.info("  Version: " .. (annotation.version or "nil"))
+        logger.info("  Annotation Type: " .. (annotation.data.annotationType or "nil"))
+        logger.info("  Annotation Color: " .. (annotation.data.annotationColor or "nil"))
+        logger.info("  Annotation Text: " .. (annotation.data.annotationText or "nil"))
+        logger.info("  Annotation Comment: " .. (annotation.data.annotationComment or ""))
+        logger.info("  Date Modified: " .. (annotation.data.dateModified or "nil"))
+        logger.info("  Sort Index: " .. (annotation.data.annotationSortIndex or "nil"))
+        logger.info("  Annotation Position JSON: " .. (annotation.data.annotationPosition or "nil"))
+    end
 
     local pos = JSON.decode(annotation.data.annotationPosition)
     local page = pos.pageIndex + 1
@@ -334,22 +344,23 @@ function Annotations.convertZoteroToKOReader(annotation, page_bbox)
     -- local page_height = page_bbox.bbox_height or page_bbox.height
     local page_height = page_bbox.height
 
-    logger.info("")
-    logger.info("Conversion parameters:")
-    logger.info("  Page dimensions: " .. string.format("%.2fx%.2f", page_bbox.width, page_bbox.height))
-    logger.info("  BBOX coordinates: " ..
-        string.format("[x0: %.2f, y0: %.2f, x1: %.2f, y1: %.2f]", page_bbox.bbox_x0, page_bbox.bbox_y0, page_bbox
-            .bbox_x1,
-            page_bbox.bbox_y1))
-    logger.info("  BBOX dimensions: " .. string.format("%.2fx%.2f", page_bbox.bbox_width, page_height))
-    logger.info("  Using Page Height height for conversion: " .. page_height)
-    logger.info("  Page index (Zotero): " .. pos.pageIndex .. " -> Page number (KOReader): " .. page)
-    logger.info("  Number of rectangles: " .. #pos.rects)
-
+    if zot_dbg_lvl > 2 then
+        logger.info("")
+        logger.info("Conversion parameters:")
+        logger.info("  Page dimensions: " .. string.format("%.2fx%.2f", page_bbox.width, page_bbox.height))
+        logger.info("  BBOX coordinates: " ..
+            string.format("[x0: %.2f, y0: %.2f, x1: %.2f, y1: %.2f]", page_bbox.bbox_x0, page_bbox.bbox_y0, page_bbox
+                .bbox_x1,
+                page_bbox.bbox_y1))
+        logger.info("  BBOX dimensions: " .. string.format("%.2fx%.2f", page_bbox.bbox_width, page_height))
+        logger.info("  Using Page Height height for conversion: " .. page_height)
+        logger.info("  Page index (Zotero): " .. pos.pageIndex .. " -> Page number (KOReader): " .. page)
+        logger.info("  Number of rectangles: " .. #pos.rects)
+        logger.info("")
+        logger.info("Rectangle conversion (Zotero coordinates -> KOReader coordinates):")
+        logger.info("  Using Page height " .. page_height .. " for Y-axis flip")
+    end
     local rects = {}
-    logger.info("")
-    logger.info("Rectangle conversion (Zotero coordinates -> KOReader coordinates):")
-    logger.info("  Using Page height " .. page_height .. " for Y-axis flip")
     for k, bbox in ipairs(pos.rects) do
         local x1 = bbox[1]
         local y1_zotero = bbox[2]
@@ -362,34 +373,36 @@ function Annotations.convertZoteroToKOReader(annotation, page_bbox)
         local y_koreader = page_height - y1_zotero - h_koreader
         local w_koreader = x2 - x1
 
-        logger.info(string.format("  Rect %d:", k))
-        logger.info(
-            string.format("    Zotero: [%.2f, %.2f, %.2f, %.2f] (x1, y1, x2, y2)", x1, y1_zotero, x2, y2_zotero)
-        )
-        logger.info(
-            string.format(
-                "    Math: x=%.2f, y=%.2f-%.2f=%.2f, w=%.2f-%.2f=%.2f, h=%.2f-%.2f=%.2f",
-                x1,
-                page_height,
-                y2_zotero,
-                y_koreader,
-                x2,
-                x1,
-                w_koreader,
-                y2_zotero,
-                y1_zotero,
-                h_koreader
+        if zot_dbg_lvl > 2 then
+            logger.info(string.format("  Rect %d:", k))
+            logger.info(
+                string.format("    Zotero: [%.2f, %.2f, %.2f, %.2f] (x1, y1, x2, y2)", x1, y1_zotero, x2, y2_zotero)
             )
-        )
-        logger.info(
-            string.format(
-                "    KOReader: {x=%.2f, y=%.2f, w=%.2f, h=%.2f}",
-                x_koreader,
-                y_koreader,
-                w_koreader,
-                h_koreader
+            logger.info(
+                string.format(
+                    "    Math: x=%.2f, y=%.2f-%.2f=%.2f, w=%.2f-%.2f=%.2f, h=%.2f-%.2f=%.2f",
+                    x1,
+                    page_height,
+                    y2_zotero,
+                    y_koreader,
+                    x2,
+                    x1,
+                    w_koreader,
+                    y2_zotero,
+                    y1_zotero,
+                    h_koreader
+                )
             )
-        )
+            logger.info(
+                string.format(
+                    "    KOReader: {x=%.2f, y=%.2f, w=%.2f, h=%.2f}",
+                    x_koreader,
+                    y_koreader,
+                    w_koreader,
+                    h_koreader
+                )
+            )
+        end
 
         table.insert(rects, {
             ["x"] = x_koreader,
@@ -418,10 +431,12 @@ function Annotations.convertZoteroToKOReader(annotation, page_bbox)
         ["y"] = rects[#rects].y + rects[#rects].h - shift,
     }
 
-    logger.info("")
-    logger.info("Position markers (with shift=" .. shift .. "):")
-    logger.info(string.format("  pos0: {page=%d, x=%.2f, y=%.2f} (first rect + shift)", pos0.page, pos0.x, pos0.y))
-    logger.info(string.format("  pos1: {page=%d, x=%.2f, y=%.2f} (last rect + shift)", pos1.page, pos1.x, pos1.y))
+    if zot_dbg_lvl > 2 then
+        logger.info("")
+        logger.info("Position markers (with shift=" .. shift .. "):")
+        logger.info(string.format("  pos0: {page=%d, x=%.2f, y=%.2f} (first rect + shift)", pos0.page, pos0.x, pos0.y))
+        logger.info(string.format("  pos1: {page=%d, x=%.2f, y=%.2f} (last rect + shift)", pos1.page, pos1.x, pos1.y))
+    end
 
     -- Convert Zotero time stamp to the format used by KOReader
     -- e.g. "2024-09-24T18:13:49Z" to "2024-09-24 18:13:49"
@@ -429,11 +444,13 @@ function Annotations.convertZoteroToKOReader(annotation, page_bbox)
     local drawer_mapped = Z2K_STYLE[annotation.data.annotationType] or "lighten"
     local datetime_converted = string.sub(string.gsub(annotation.data.dateModified, "T", " "), 1, -2)
 
-    logger.info("")
-    logger.info("Field mappings:")
-    logger.info("  Color: '" .. annotation.data.annotationColor .. "' -> '" .. color_mapped .. "'")
-    logger.info("  Type: '" .. annotation.data.annotationType .. "' -> '" .. drawer_mapped .. "'")
-    logger.info("  DateTime: '" .. annotation.data.dateModified .. "' -> '" .. datetime_converted .. "'")
+    if zot_dbg_lvl > 2 then
+        logger.info("")
+        logger.info("Field mappings:")
+        logger.info("  Color: '" .. annotation.data.annotationColor .. "' -> '" .. color_mapped .. "'")
+        logger.info("  Type: '" .. annotation.data.annotationType .. "' -> '" .. drawer_mapped .. "'")
+        logger.info("  DateTime: '" .. annotation.data.dateModified .. "' -> '" .. datetime_converted .. "'")
+    end
 
     local koAnnotation = {
         ["color"] = color_mapped,
@@ -454,11 +471,16 @@ function Annotations.convertZoteroToKOReader(annotation, page_bbox)
         koAnnotation["note"] = annotation.data.annotationComment
     end
 
-    logger.info("")
-    logger.info("Final KOReader annotation:")
-    logger.info(JSON.encode(koAnnotation))
-    logger.info("=== END RECEIVING ANNOTATION ===")
-    logger.info("")
+    if zot_dbg_lvl > 2 then
+        logger.info("")
+        logger.info("Final KOReader annotation:")
+        logger.info(JSON.encode(koAnnotation))
+        logger.info("=== END RECEIVING ANNOTATION ===")
+        logger.info("")
+    elseif zot_dbg_lvl > 1 then
+        logger.info("Zotero: Final KOReader annotation:")
+        logger.info(JSON.encode(koAnnotation))
+    end
 
     return koAnnotation
 end
@@ -556,6 +578,11 @@ function Annotations.createAnnotations(file_path, key, creation_callback)
     end
 
     return #z_annotations - cnt, nil
+end
+
+-- Set debug level for this API
+function Annotations.setDebugLevel(level)
+    zot_dbg_lvl = level
 end
 
 return Annotations

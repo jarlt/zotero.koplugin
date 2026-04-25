@@ -35,6 +35,9 @@ local ZOTERO_BASE_URL = "https://api.zotero.org"
 -- Update whenever the database scheme is updated/changed
 local db_version = 1
 
+-- Set debug level for this plugin; 
+local zot_dbg_lvl = 1
+
 local ZOTERO_DB_SCHEMA = [[
 CREATE TABLE IF NOT EXISTS itemData (
 	itemID INTEGER PRIMARY KEY,
@@ -689,6 +692,11 @@ function API.setUserLibraryVersion(version)
     db:exec(sql)
 end
 
+-- Set debug level for this API
+function API.setDebugLevel(level)
+    zot_dbg_lvl = level
+end
+
 -- Retrieve underlying settings object to make changes from the outside
 function API.getSettings()
     return API.settings
@@ -974,7 +982,9 @@ function API.fetchZoteroItems(since, progress_callback)
                     logger.info("Zotero: Processing deleted item: " .. deleted_key)
                     local res = stmt_get_ItemVersion:reset():bind(deleted_key):step()
                     if res ~= nil then
-                        logger.info("Zotero: Deleting item from local database: " .. deleted_key)
+                        if zot_dbg_lvl > 2 then
+                            logger.info("Zotero: Deleting item from local database: " .. deleted_key)
+                        end
                         stmt_delete_item:reset():bind(deleted_key):step()
                     end
                 end
@@ -984,7 +994,9 @@ function API.fetchZoteroItems(since, progress_callback)
             if deleted_data.collections then
                 local stmt_delete_collection = db:prepare(ZOTERO_DB_DELETE_COLLECTION)
                 for _, deleted_key in ipairs(deleted_data.collections) do
-                    logger.info("Zotero: Processing deleted collection: " .. deleted_key)
+                    if zot_dbg_lvl > 2 then
+                        logger.info("Zotero: Processing deleted collection: " .. deleted_key)
+                    end
                     stmt_delete_collection:reset():bind(deleted_key):step()
                 end
                 stmt_delete_collection:close()
@@ -2346,7 +2358,9 @@ function API.attachItemAnnotations(item, annotation_callback)
         end
 
         -- Build a list of pages that need BBOX data
-        logger.info("Zotero: Building list of pages that need BBOX data")
+        if zot_dbg_lvl > 1 then
+            logger.info("Zotero: Building list of pages that need BBOX data")
+        end
         local pages_needed = {}
         for key, itemInfo in pairs(zoteroItems) do
             local item = API.getItem(key)
@@ -2354,12 +2368,16 @@ function API.attachItemAnnotations(item, annotation_callback)
                 local pos = JSON.decode(item.data.annotationPosition)
                 local page = pos.pageIndex + 1
                 pages_needed[page] = true
-                logger.info("Zotero: Page " .. page .. " needs BBOX data for annotation " .. key)
+                if zot_dbg_lvl > 2 then
+                    logger.info("Zotero: Page " .. page .. " needs BBOX data for annotation " .. key)
+                end
             end
         end
 
         -- Get BBOX data for all pages that have annotations
-        logger.info("Zotero: Getting BBOX dimensions for pages: " .. JSON.encode(pages_needed))
+        if zot_dbg_lvl > 1 then
+            logger.info("Zotero: Getting BBOX dimensions for pages: " .. JSON.encode(pages_needed))
+        end
         local page_dimensions = Annotations.getPageDimensions(filePath, pages_needed)
         if page_dimensions == nil then
             logger.err("Zotero: Could not get page dimensions for " .. filePath)
@@ -2377,7 +2395,9 @@ function API.attachItemAnnotations(item, annotation_callback)
                 if page_bbox == nil then
                     logger.err("Zotero: No BBOX data for page " .. page .. " of annotation " .. key .. ", skipping")
                 else
-                    logger.info("Zotero: Converting annotation " .. key .. " on page " .. page)
+                    if zot_dbg_lvl > 1 then
+                        logger.info("Zotero: Converting annotation " .. key .. " on page " .. page)
+                    end
                     if localZotAnn[key] == nil then
                         table.insert(koreaderAnnotations, Annotations.convertZoteroToKOReader(item, page_bbox))
                     elseif localZotAnn[key].version < itemInfo.version then

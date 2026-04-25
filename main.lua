@@ -117,7 +117,7 @@ function ZoteroBrowser:openAttachment(key)
 	local targetDir, full_path
     if e ~= nil or item == nil then
 		local b = InfoMessage:new({
-			text = _("Could not open file.") .. e,
+			text = _("Could not open file. ") .. e,
 			timeout = 5,
 			icon = "notice-warning",
 		})
@@ -129,7 +129,7 @@ function ZoteroBrowser:openAttachment(key)
                 local full_path, e = ZoteroAPI.downloadAttachment(item, full_path)
                 if e ~= nil or full_path == nil then
                     local b = InfoMessage:new({
-                        text = _("Could not download file.") .. e,
+                        text = _("Could not download file. ") .. e,
                         timeout = 5,
                         icon = "notice-warning",
                     })
