@@ -36,7 +36,7 @@ local ZOTERO_BASE_URL = "https://api.zotero.org"
 local db_version = 1
 
 -- Set debug level for this plugin; 
-local zot_dbg_lvl = 1
+local zot_dbg_lvl = 2
 
 local ZOTERO_DB_SCHEMA = [[
 CREATE TABLE IF NOT EXISTS itemData (

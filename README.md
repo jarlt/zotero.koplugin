@@ -11,7 +11,7 @@ This addon for [KOReader](https://github.com/koreader/koreader) allows you to vi
 * Synchronization via Zotero Web API
 * Display main bibliographical information for items
 * Open attached PDF/EPUB/HTML files
-* Sync annotations from Zotero to KOReader and the other way around (See limitations section)
+* Sync 'simple' annotations from Zotero to KOReader and the other way around (see limitations section)
 * Automatically download items of selected collections at sync time
 * Supports WebDAV storage backend
 * Search entries by the title of the publication or name of the first author.
@@ -21,6 +21,7 @@ This addon for [KOReader](https://github.com/koreader/koreader) allows you to vi
 * The plugin will sync annotations both ways. It supports deletions but changes (i.e., enlarging or modifying an annotation) are not yet supported
 * Syncing of annotations requires opening the file from Zotero browse, opening it from recents will not sync annotations. Additionally, the file must be closed in KOReader before syncing for annotations to be sent to the server at sync time
 * Annotations only work for pdf files, not epub or other formats
+* Only 'simple' annotations (i.e. highlight and underline) are currently supported
 * Search function currently quite limited, no real access to full author lists, DOIs, tags, etc.
 
 
@@ -35,8 +36,8 @@ This addon for [KOReader](https://github.com/koreader/koreader) allows you to vi
 
 ## Usage
 
-This plugin adds a 'Zotero' item to the search menu ('Top Menu -> Search (magnifying glass) -> Zotero').
-It keeps most of your Zotero library information on your device and apart from "Synchronize" tries to avoid interacting with the Zotero server.
+This plugin adds a 'Zotero' item to the search menu ('Top Menu -> Search (magnifying glass) -> Zotero'). Note that this might be 'hidden', as it often only appears on the 2nd page.
+The plugin keeps most of your Zotero library information on your device and apart from "Synchronize" tries to avoid interacting with the Zotero server.
 The only exception is when trying to open an attachment which is not yet available locally: in this case it will automatically try to download the item.
 
 ### Browse
@@ -51,7 +52,7 @@ When opening an item from the Zotero Browser it will also check its Zotero annot
 
 You can also **long-press** on items. The action depends on what type of item is selected:
 - **Collection:** Show a dialog which allows you to set this collection as an offline collection.
-- **Item:** Show detailed information about the item: apart from the standard bibliographical info it also lists 'tags' and the 'abstract' (if available on zotero. It also lists *all* (supported) attachments of this item, so you can use this view to open a specific attachment.
+- **Item:** Show detailed information about the item: apart from the standard bibliographical info it also lists 'tags' and the 'abstract' (if available on zotero). It also lists *all* (supported) attachments of this item, so you can use this view to open a specific attachment.
 
 You can **search** the database by clicking on the magnifying glass icon in the top left corner.
 
@@ -61,22 +62,22 @@ Select the gesture you want to use, then navigate to 'General -> Zotero Collecti
 
 ### Synchronize
 
-The initial synchronization will **download** the complete metadata for your collection from the Zotero server. Depending on the size of your collection this can take quite some time (e.g. for my library about 1 minute per 1000 items).
+The initial synchronization will **download** the complete metadata for your collection from the Zotero server. Depending on the size of your collection this could take quite some time (e.g. for my library about 1 minute per 1000 items).
 All subsequent sync's should be much faster, as it will only download changes since the last sync.
 
 In detail 'synchronize' entails
-1. **Uploading** new annotations to the Zotero server
+1. **Uploading** new local annotations to the Zotero server
 2. **Downloading** collection information
 3. **Downloading** library items and cataloguing them
 4. **Downloading** all attachments in collections marked as 'offline collections'
 
 ### Maintenance
 
-- Re-analyze local items will go through all the items in the local database and re-check which ones have supported attachments, are attachments themselves or are relevant annotations. Depending on your collection size this can take quite some time, but is still much faster then a full re-sync and does not need any internet connection.
+- **Re-analyze local items** will go through all the items in the local database and re-check which ones have supported attachments, are attachments themselves or are relevant annotations. Depending on your collection size this can take quite some time, but is still much faster then a full re-sync and does not need any internet connection.
 
-- Resync entire collection: only meant as a last resort as this will delete the complete local database and resynchronize everything from the zotero server.
+- **Re-scan storage for local items** checks for downloaded attachment files. Useful after resyncing the complete library, as it will have lost info about local items in the database.
 
-- Re-scan the local storage to check for downloaded attachment files. Useful after resyncing the complete library, as this will loose info about local items in the database.
+- **Resync entire collection** is only meant as a last resort, as this will delete the complete local database and resynchronize everything from the zotero server.
 
 ### Settings
 
