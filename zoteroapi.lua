@@ -22,7 +22,7 @@ local DocSettings = require("docsettings")
 -- /storage/<KEY>/version: Version number of downloaded attachment
 -- /meta.lua: Metadata containing library version, items etc.
 
-local API = { ["version"] = "JA-JD v1.1 dev" } -- TODO: Update before release version
+local API = { ["version"] = "JA-JD 1.1 RC1" } -- TODO: Update before release version
 
 local SUPPORTED_MEDIA_TYPES = {
     [1] = "application/pdf",

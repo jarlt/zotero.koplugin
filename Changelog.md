@@ -1,10 +1,20 @@
 # Change Log
 
+## [JA-JD 1.1 RC1] - 2026-04-26
+### Changed
+- Merged juandiegon's changes into this repository
+- If local attachment exists it can once again be opened without having a network connection
+
+### Fixed
+- local attachment items without annotations causing crash
+- prevent crash when trying to update attachment info
+
+
 ## JD 0.5 - 2025-10-07
 ### Changed
 - Removed sqlite json functions in queries and moved them to be processed by Lua given latest version of KOReader does not include the JSON package
 
-## [JA 1.0 RC4] - 2025-07-07
+## [JD 1.0 RC4] - 2025-07-07
 ### Added
 - Added use of network manager when connecting to prevent connection errors and toggling automatic wifi connection
 - Added automatic setting of not writing annotation to pdf in files used by Zotero.koplugin. This behavior can be changed in the settings dialog
