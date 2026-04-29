@@ -649,10 +649,14 @@ function API.openDB()
 			API.db:exec(ZOTERO_DB_SCHEMA_EXTRAS_V2)
 			API.setDatabaseVersion(db_version)		
 			logger.info("Zotero: Upgraded database to version 2.")
+            -- Automatically re-check local database items to populate new tables
+            -- API.checkItemData()
+            -- can take several minutes for large db's blocking KOReader startup, 
+            -- so not a good idea after all
 		end
 		if dbVersion > 0 then
 			API.getUserLibraryVersion()
-			logger.info("Zotero: Local db version: "..API.libVersion)
+			logger.info("Zotero: Local db version: " .. API.libVersion .. "; db schema version " .. dbVersion)
 		end
         return API.db
     end
@@ -1466,11 +1470,14 @@ end
 function API.checkItemData(progressCallBack)
     local db = API.openDB()
 
+    if zot_dbg_lvl > 1 then
+        logger.info("Zotero: Rescanning local database items...")
+    end
     local stats0 = API.getStats()
     local frac = 100 / stats0.items
     local dStep = math.max(math.floor(stats0.items / 100), 10)
 
-    local stmt = db:prepare([[SELECT value FROM
+    local stmt = db:prepare([[SELECT value, items.itemID FROM
     		itemData INNER JOIN items ON itemData.itemID = items.itemID]])
 
     local stmt_update_collectionItems = db:prepare(ZOTERO_DB_UPDATE_COLLECTION_ITEMS)
@@ -1488,6 +1495,7 @@ function API.checkItemData(progressCallBack)
 	
 	local annotationTypes = Annotations.supportedZoteroTypes()
 
+    -- clear the following tables for a fresh start:
     db:exec("DELETE FROM collectionItems;")
     db:exec("DELETE FROM itemTags;")
     db:exec("DELETE FROM tags;")
@@ -1527,7 +1535,7 @@ function API.checkItemData(progressCallBack)
         if item.data.inPublications then
 			if item.data.itemType == 'attachment' then
 				if item.data.parentItem == nil then
-					-- only insert attachment if it does not have a parent item. Probably shoud never happen...
+					-- only insert attachment if it does not have a parent item. Probably should never happen...
 					stmt_upsert_publications:reset():bind(item.key):step()
 				end
 			else
