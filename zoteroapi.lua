@@ -129,7 +129,19 @@ CREATE TABLE IF NOT EXISTS itemTags (
 	FOREIGN KEY (itemID) REFERENCES items(itemID) ON DELETE CASCADE,
 	FOREIGN KEY (tagID) REFERENCES tags(tagID) ON DELETE CASCADE
 );
-
+CREATE TABLE IF NOT EXISTS creators (    
+    creatorID INTEGER PRIMARY KEY,
+    firstName TEXT,
+    lastName TEXT,    
+    UNIQUE (lastName, firstName)
+);
+CREATE TABLE IF NOT EXISTS creatorItems (    
+    creatorID INT NOT NULL,
+    itemID INT NOT NULL,
+    PRIMARY KEY (creatorID, itemID),
+    FOREIGN KEY (creatorID) REFERENCES creators(creatorID) ON DELETE CASCADE,
+    FOREIGN KEY (itemID) REFERENCES items(itemID) ON DELETE CASCADE
+);
 ]]
 
 
@@ -647,7 +659,8 @@ function API.openDB()
 			API.setDatabaseVersion(db_version)
 		elseif dbVersion == 1 then
 			API.db:exec(ZOTERO_DB_SCHEMA_EXTRAS_V2)
-			API.setDatabaseVersion(db_version)		
+			API.setDatabaseVersion(db_version)
+            dbVersion = db_version
 			logger.info("Zotero: Upgraded database to version 2.")
             -- Automatically re-check local database items to populate new tables
             -- API.checkItemData()
@@ -1208,14 +1221,17 @@ function API.fetchZoteroItems(since, progress_callback)
 					end
 				end
 				-- Check tags
-				local res = stmt_get_ItemVersion:reset():bind(key):step()
-				local itemID = tonumber(res[2])
-				for i, tagInfo in pairs(item.data.tags) do
-					--print(itemID, key, tagInfo.tag)
-					stmt_upsert_tag:reset():bind(tagInfo.tag):step()
-					stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
-				end
-
+                if key == "RPY6PGIV" then print(JSON.encode(item)) end
+                if item.data.tags ~= nil then
+                    local res = stmt_get_ItemVersion:reset():bind(key):step()
+                    local itemID = tonumber(res[2])
+                    
+                    for i, tagInfo in pairs(item.data.tags) do
+                        print(key, tagInfo.tag)
+                        stmt_upsert_tag:reset():bind(tagInfo.tag):step()
+                        stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
+                    end
+                end
 			end
         end
     end)
@@ -1543,10 +1559,12 @@ function API.checkItemData(progressCallBack)
 			end
 		end
         -- Check tags
-        for i, tagInfo in pairs(item.data.tags) do
-            --print(itemID, item.key, tagInfo.tag)
-            stmt_upsert_tag:reset():bind(tagInfo.tag):step()
-            stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
+        if item.data.tags ~= nil then
+            for i, tagInfo in pairs(item.data.tags) do
+                --print(itemID, item.key, tagInfo.tag)
+                stmt_upsert_tag:reset():bind(tagInfo.tag):step()
+                stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
+            end
         end
         cnt = cnt + 1
         if progressCallBack and (cnt % dStep == 0) then
