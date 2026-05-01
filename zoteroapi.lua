@@ -438,6 +438,18 @@ local ZOTERO_UPSERT_ITEM_NOTES = [[
 INSERT INTO itemNotes(itemID, parentItemID, title, note) SELECT i.itemID, p.itemID, ?3, ?4 FROM items i, items p WHERE i.key = ?1 AND p.key=?2;
 ]]
 	
+local ZOTERO_UPSERT_CREATOR = [[
+INSERT INTO creators(lastName, firstName) SELECT ?1, ?2
+ON CONFLICT DO 
+    UPDATE SET lastName = ?1, firstName = ?2
+RETURNING creatorID;
+]]
+
+local ZOTERO_UPSERT_CREATOR_ITEMS = [[
+INSERT INTO creatorItems(creatorID, itemID) SELECT ?1, ?2
+ON CONFLICT DO NOTHING;
+]]
+
 local ZOTERO_UPSERT_TAG = [[
 INSERT INTO tags(name) VALUES(?)
 ON CONFLICT DO NOTHING;
@@ -1500,9 +1512,11 @@ function API.checkItemData(progressCallBack)
 
     -- to check whether changes where made
     local stmt_changes = db:prepare(ZOTERO_DB_CHANGES)
+
     local stmt_upsert_tag = db:prepare(ZOTERO_UPSERT_TAG)
     local stmt_upsert_item_tag = db:prepare(ZOTERO_UPSERT_ITEM_TAGS)
-    
+    local stmt_upsert_creator_item = db:prepare(ZOTERO_UPSERT_CREATOR_ITEMS)
+    local stmt_upsert_creator = db:prepare(ZOTERO_UPSERT_CREATOR)    
     local stmt_upsert_publications = db:prepare(ZOTERO_UPSERT_PUBLICATIONS)
 	
     local attachments = {}
@@ -1515,10 +1529,14 @@ function API.checkItemData(progressCallBack)
     db:exec("DELETE FROM collectionItems;")
     db:exec("DELETE FROM itemTags;")
     db:exec("DELETE FROM tags;")
+    db:exec("DELETE FROM creatorItems;")
+    db:exec("DELETE FROM creators;")
     db:exec("DELETE FROM publicationsItems;")
     
     local row = stmt:reset():step()
     local item, itemID
+    local creatorID, cID
+
     local cnt = 0
     while row ~= nil do
         item = JSON.decode(row[1])
@@ -1569,6 +1587,14 @@ function API.checkItemData(progressCallBack)
         cnt = cnt + 1
         if progressCallBack and (cnt % dStep == 0) then
             progressCallBack(string.format("Re-analysing items: %.0f%%", cnt * frac))
+        end
+        -- Check creators
+        if item.data.creators ~= nil then
+            for i, creator in pairs(item.data.creators) do
+                cID = stmt_upsert_creator:reset():bind(creator.lastName or "", creator.firstName or ""):step()
+                creatorID = tonumber(cID[1])
+                stmt_upsert_creator_item:reset():bind(creatorID, itemID):step()
+            end
         end
         row = stmt:step(row)
     end
