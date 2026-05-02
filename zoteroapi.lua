@@ -1140,6 +1140,8 @@ function API.fetchZoteroItems(since, progress_callback)
 
     local stmt_upsert_tag = db:prepare(ZOTERO_UPSERT_TAG)
     local stmt_upsert_item_tag = db:prepare(ZOTERO_UPSERT_ITEM_TAGS)
+    local stmt_upsert_creator_item = db:prepare(ZOTERO_UPSERT_CREATOR_ITEMS)
+    local stmt_upsert_creator = db:prepare(ZOTERO_UPSERT_CREATOR)    
     local stmt_upsert_publications = db:prepare(ZOTERO_UPSERT_PUBLICATIONS)
 
     local headers = API.zoteroHeader
@@ -1257,17 +1259,23 @@ function API.fetchZoteroItems(since, progress_callback)
 					end
 				end
 				-- Check tags
-                if key == "RPY6PGIV" then print(JSON.encode(item)) end
+                local res = stmt_get_ItemVersion:reset():bind(key):step()
+                local itemID = tonumber(res[2])                
                 if item.data.tags ~= nil then
-                    local res = stmt_get_ItemVersion:reset():bind(key):step()
-                    local itemID = tonumber(res[2])
-                    
                     for i, tagInfo in pairs(item.data.tags) do
-                        print(key, tagInfo.tag)
                         stmt_upsert_tag:reset():bind(tagInfo.tag):step()
                         stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
                     end
                 end
+                -- Check creators
+                if item.data.creators ~= nil then
+                    for i, creator in pairs(item.data.creators) do
+                        cID = stmt_upsert_creator:reset():bind(creator.lastName or "", creator.firstName or ""):step()
+                        creatorID = tonumber(cID[1])
+                        stmt_upsert_creator_item:reset():bind(creatorID, itemID):step()
+                    end
+                end
+
 			end
         end
     end)
@@ -2581,7 +2589,6 @@ function API.creatorCount(creator)
         --TO-DO: implement!
         cCount = tonumber(db:rowexec([[SELECT COUNT(creatorID) FROM creators;]]))
     end
-    print("Creator count:", cCount)
 	return cCount
 end
 

@@ -182,7 +182,6 @@ function ZoteroBrowser:onMenuSelect(item)
     elseif item.type == "tag"  then
         self:displayTaggedItems(item.text)
     elseif item.type == "creator"  then
-        print(item.text)
         self:displayCreatorItems(item.text, item.id)
     elseif item.type == "item" then
         self.download_dialog = InfoMessage:new({
@@ -296,7 +295,6 @@ function ZoteroBrowser:displayCreatorItems(creator, cID)
     local items = ZoteroAPI.getCreatorItems(cID)
 	table.insert(self.paths, creator)
     table.insert(self.keys, "creator")
-    print(items[1].text)
     self:setItems(items)
 end
 
