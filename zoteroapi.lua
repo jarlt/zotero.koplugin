@@ -471,73 +471,47 @@ SELECT name FROM itemTags INNER JOIN tags USING (tagID) WHERE itemID = ?;
 
 -- Get items tagged with the provided tag name 
 local ZOTERO_GET_TAGGED_ITEMS = [[
-SELECT 
-	key, 
-	name, 
-	type 
-FROM (
-	SELECT
-	   items.key,
---		jsonb_extract(value, '$.data.title') AS title,
-		---- if possible, prepend creator summary
-		coalesce(jsonb_extract(value, '$.meta.creatorSummary') || ' - ', '') || jsonb_extract(value, '$.data.title') AS name,
-		iif(items.itemTypeID = 3, 'attachment', 'item') AS type
-	FROM 
-		itemData INNER JOIN items ON itemData.itemID = items.itemID
-	WHERE
-		itemData.itemID IN (
-			SELECT itemID FROM itemTags INNER JOIN tags USING (tagID) WHERE name = ?
-		)
-	)
-ORDER BY name;
+SELECT
+    items.key,
+    value,
+    iif(items.itemTypeID = 3, 'attachment', 'item') AS type
+FROM 
+    itemData INNER JOIN items ON itemData.itemID = items.itemID
+WHERE
+    itemData.itemID IN (
+        SELECT itemID FROM itemTags INNER JOIN tags USING (tagID) WHERE name = ?
+    )
+;
 ]]
 
 -- Get items created by the creator with the provided creatorID 
 local ZOTERO_GET_CREATOR_ITEMS = [[
-SELECT 
-	key, 
-	name, 
-	type 
-FROM (
-	SELECT
-	   items.key,
---		jsonb_extract(value, '$.data.title') AS title,
-		---- if possible, prepend creator summary
-		coalesce(jsonb_extract(value, '$.meta.creatorSummary') || ' - ', '') || jsonb_extract(value, '$.data.title') AS name,
-		iif(items.itemTypeID = 3, 'attachment', 'item') AS type
-	FROM 
-		itemData INNER JOIN items ON itemData.itemID = items.itemID
-	WHERE
-		itemData.itemID IN (
-			SELECT itemID FROM creatorItems WHERE creatorID = ?
-		)
-	)
-ORDER BY name;
+SELECT
+    items.key,
+    value,
+    iif(items.itemTypeID = 3, 'attachment', 'item') AS type
+FROM 
+    itemData INNER JOIN items ON itemData.itemID = items.itemID
+WHERE
+    itemData.itemID IN (
+        SELECT itemID FROM creatorItems WHERE creatorID = ?
+    )
+;
 ]]
 
 -- Get publication items
 local ZOTERO_GET_MY_PUBLICATIONS = [[
-SELECT 
-	key, 
-	name, 
-	type,
-	date 
-FROM (
-	SELECT
-	   items.key,
---		jsonb_extract(value, '$.data.title') AS title,
-		---- if possible, prepend creator summary
-		coalesce(jsonb_extract(value, '$.meta.creatorSummary') || ' - ', '') || jsonb_extract(value, '$.data.title') AS name,
-		iif(items.itemTypeID = 3, 'attachment', 'item') AS type,
-		jsonb_extract(value, '$.data.date') AS date
-	FROM 
-		itemData INNER JOIN items ON itemData.itemID = items.itemID
-	WHERE
-		itemData.itemID IN (
-			SELECT itemID FROM publicationsItems
-		)
-	)
-ORDER BY date DESC;
+SELECT
+    items.key,
+    value,
+    iif(items.itemTypeID = 3, 'attachment', 'item') AS type
+FROM 
+    itemData INNER JOIN items ON itemData.itemID = items.itemID
+WHERE
+    itemData.itemID IN (
+        SELECT itemID FROM publicationsItems
+    )
+;
 ]]
 
 local ZOTERO_GET_ITEM_VERSION = [[ SELECT version, itemID FROM items WHERE key = ?; ]]
@@ -642,6 +616,30 @@ local function table_contains(t, search_value)
     return false
 end
 
+local function formatICollectiontem(sqlRow)
+    local item_key = sqlRow[1]
+    local text = sqlRow[2]
+    local item_type = sqlRow[3]
+
+    -- For items (not collections), row[2] is JSON that needs to be parsed
+    if item_type ~= "collection" then
+        local item_data = JSON.decode(text)
+        -- Construct display name: prepend creator summary if available
+        local creator_summary = item_data.meta and item_data.meta.creatorSummary or ""
+        local title = item_data.data and item_data.data.title or ""
+        if creator_summary ~= "" then
+            text = creator_summary .. " - " .. title
+        else
+            text = title
+        end
+    end
+
+    return {
+        ["key"] = item_key,
+        ["text"] = text,
+        ["type"] = item_type,
+    }
+end
 -- TODO: Commenting to see if it used or needed for removal
 -- local function file_slurp(path)
 -- 	if not file_exists(path) then
@@ -1258,24 +1256,24 @@ function API.fetchZoteroItems(since, progress_callback)
 						stmt_upsert_publications:reset():bind(item.key):step()		
 					end
 				end
-				-- Check tags
-                local res = stmt_get_ItemVersion:reset():bind(key):step()
-                local itemID = tonumber(res[2])                
-                if item.data.tags ~= nil then
-                    for i, tagInfo in pairs(item.data.tags) do
-                        stmt_upsert_tag:reset():bind(tagInfo.tag):step()
-                        stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
+				-- Check tags and creators
+                if (item.data.tags ~= nil) or (item.data.creators ~= nil) then
+                    local res = stmt_get_ItemVersion:reset():bind(key):step()
+                    local itemID = tonumber(res[2])                
+                    if item.data.tags ~= nil then
+                        for i, tagInfo in pairs(item.data.tags) do
+                            stmt_upsert_tag:reset():bind(tagInfo.tag):step()
+                            stmt_upsert_item_tag:reset():bind(itemID, tagInfo.tag, tagInfo.type or 0):step()
+                        end
+                    end
+                    if item.data.creators ~= nil then
+                        for i, creator in pairs(item.data.creators) do
+                            cID = stmt_upsert_creator:reset():bind(creator.lastName or "", creator.firstName or ""):step()
+                            creatorID = tonumber(cID[1])
+                            stmt_upsert_creator_item:reset():bind(creatorID, itemID):step()
+                        end
                     end
                 end
-                -- Check creators
-                if item.data.creators ~= nil then
-                    for i, creator in pairs(item.data.creators) do
-                        cID = stmt_upsert_creator:reset():bind(creator.lastName or "", creator.firstName or ""):step()
-                        creatorID = tonumber(cID[1])
-                        stmt_upsert_creator_item:reset():bind(creatorID, itemID):step()
-                    end
-                end
-
 			end
         end
     end)
@@ -2001,7 +1999,7 @@ function API.displayCollection(key)
     local result = {}
     local row, _ = stmt:step({}, {})
     while row ~= nil do
-        local item_key = row[1]
+--[[         local item_key = row[1]
         local text = row[2]
         local item_type = row[3]
 
@@ -2023,6 +2021,8 @@ function API.displayCollection(key)
             ["text"] = text,
             ["type"] = item_type,
         })
+ ]]        
+        table.insert(result, formatICollectiontem(row))
         --print(row[1], row[2], row[3])
         row = stmt:step(row)
     end
@@ -2556,16 +2556,10 @@ function API.getTaggedItems(tag)
     if nr == 0 then
         return nil
     end
-
     local items = {}
-
     for i=1,nr do
-        table.insert(items, {
-            ["key"] = result[1][i],
-            ["text"] = result[2][i],
-            ["type"] = result[3][i],
-        })
-    end
+        table.insert(items, formatICollectiontem({result[1][i], result[2][i], result[3][i]}))
+        end
     return items
 end
 
@@ -2622,11 +2616,7 @@ function API.getCreatorItems(cID)
 
     local items = {}
     for i=1,nc do
-        table.insert(items, {
-            ["key"] = result[1][i],
-            ["text"] = result[2][i],
-            ["type"] = result[3][i],
-        })
+        table.insert(items, formatICollectiontem({result[1][i], result[2][i], result[3][i]}))
     end
     return items
 end
@@ -2646,7 +2636,6 @@ function API.getMyPublications()
     local stmt = db:prepare(ZOTERO_GET_MY_PUBLICATIONS)
 
     local result, nr = stmt:resultset()
-
     stmt:close()
 
     if nr == 0 then
@@ -2654,13 +2643,8 @@ function API.getMyPublications()
     end
 
     local items = {}
-
-    for i=1,nr do
-        table.insert(items, {
-            ["key"] = result[1][i],
-            ["text"] = result[2][i],
-            ["type"] = result[3][i],
-        })
+    for i = 1, nr do
+        table.insert(items, formatICollectiontem({result[1][i], result[2][i], result[3][i]}))
     end
     return items
 end
