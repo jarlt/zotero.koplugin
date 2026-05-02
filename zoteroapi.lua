@@ -492,6 +492,29 @@ FROM (
 ORDER BY name;
 ]]
 
+-- Get items created by the creator with the provided creatorID 
+local ZOTERO_GET_CREATOR_ITEMS = [[
+SELECT 
+	key, 
+	name, 
+	type 
+FROM (
+	SELECT
+	   items.key,
+--		jsonb_extract(value, '$.data.title') AS title,
+		---- if possible, prepend creator summary
+		coalesce(jsonb_extract(value, '$.meta.creatorSummary') || ' - ', '') || jsonb_extract(value, '$.data.title') AS name,
+		iif(items.itemTypeID = 3, 'attachment', 'item') AS type
+	FROM 
+		itemData INNER JOIN items ON itemData.itemID = items.itemID
+	WHERE
+		itemData.itemID IN (
+			SELECT itemID FROM creatorItems WHERE creatorID = ?
+		)
+	)
+ORDER BY name;
+]]
+
 -- Get publication items
 local ZOTERO_GET_MY_PUBLICATIONS = [[
 SELECT 
@@ -516,6 +539,7 @@ FROM (
 	)
 ORDER BY date DESC;
 ]]
+
 local ZOTERO_GET_ITEM_VERSION = [[ SELECT version, itemID FROM items WHERE key = ?; ]]
 
 -- Return synced version according to database for item identified by its key. Also return lastest version and itemID
@@ -2544,6 +2568,60 @@ function API.tagCount()
     local tagCount = tonumber(db:rowexec([[SELECT COUNT(name) FROM tags;]]))
     --print("Tag count:", tagCount)
 	return tagCount
+end
+
+-- Get creator count for specified creator (or the complete library)
+function API.creatorCount(creator)
+    
+    local db = API.openDB()
+    local cCount
+    if creator == nil then
+        cCount = tonumber(db:rowexec([[SELECT COUNT(creatorID) FROM creators;]]))
+    else
+        --TO-DO: implement!
+        cCount = tonumber(db:rowexec([[SELECT COUNT(creatorID) FROM creators;]]))
+    end
+    print("Creator count:", cCount)
+	return cCount
+end
+
+function API.getCreators()
+    
+    local db = API.openDB()
+	--print("Getting creators")
+    local creators, nc = db:exec([[SELECT lastName, firstName, creatorID FROM creators ORDER BY lower(lastName);]])
+    local result = {}
+    for i =  1, nc do
+		table.insert(result, {
+			["text"] = (creators[1][i] or "") .. ", " .. (creators[2][i] or ""),
+            ["id"] = tonumber(creators[3][i]),
+			["type"] = "creator",
+		})
+	end
+	--print(JSON.encode(result[1]))
+	return result
+end
+
+function API.getCreatorItems(cID)
+    
+    local db = API.openDB()
+	--print("Getting creators")
+    
+    local stmt = db:prepare(ZOTERO_GET_CREATOR_ITEMS)
+    stmt:reset()
+    stmt:bind1(1, cID)
+    local result, nc = stmt:resultset()
+    stmt:close()
+
+    local items = {}
+    for i=1,nc do
+        table.insert(items, {
+            ["key"] = result[1][i],
+            ["text"] = result[2][i],
+            ["type"] = result[3][i],
+        })
+    end
+    return items
 end
 
 function API.publicationsCount()

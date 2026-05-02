@@ -110,6 +110,9 @@ function ZoteroBrowser:onReturn()
     elseif key == "tag" then
 		itemmatch = { ["text"] = path }
 		self:displayTags(itemmatch)
+    elseif key == "creator" then
+		itemmatch = { ["text"] = path }
+		self:displayCreators(itemmatch)
     else
         self:displayCollection(self.keys[#self.keys], itemmatch)
     end
@@ -168,12 +171,19 @@ function ZoteroBrowser:onMenuSelect(item)
 		table.insert(self.paths, "Tags/")
 		table.insert(self.keys, "tagList")
 		self:displayTags()
+    elseif item.type == "creator_collection"  then
+		table.insert(self.paths, "Authors/")
+		table.insert(self.keys, "authorList")
+		self:displayCreators()
     elseif item.type == "publications"  then
 		table.insert(self.paths, "My Publications/")
 		table.insert(self.keys, "publications")
 		self:displayMyPublications()
     elseif item.type == "tag"  then
         self:displayTaggedItems(item.text)
+    elseif item.type == "creator"  then
+        print(item.text)
+        self:displayCreatorItems(item.text, item.id)
     elseif item.type == "item" then
         self.download_dialog = InfoMessage:new({
             text = _("Downloading file"),
@@ -277,6 +287,20 @@ function ZoteroBrowser:displayTaggedItems(tag)
     self:setItems(items)
 end
 
+function ZoteroBrowser:displayCreators(itemmatch)
+    local items = ZoteroAPI.getCreators()
+    self:setItems(items, itemmatch)
+end
+
+function ZoteroBrowser:displayCreatorItems(creator, cID)
+    local items = ZoteroAPI.getCreatorItems(cID)
+	table.insert(self.paths, creator)
+    table.insert(self.keys, "creator")
+    print(items[1].text)
+    self:setItems(items)
+end
+
+
 function ZoteroBrowser:displayMyPublications()
     local items = ZoteroAPI.getMyPublications()
     --print(items[1].text)
@@ -294,6 +318,15 @@ function ZoteroBrowser:displayCollection(collection_id, itemmatch)
 				["text"] = _("All Items"),
 				["type"] = "wildcard_collection"
 			})
+            local cCnt = ZoteroAPI.creatorCount()
+            if cCnt > 0 then
+				table.insert(items, 2, {
+					["text"] = _("Authors"),
+					["type"] = "creator_collection",
+					["bold"] = true,
+					["mandatory"] = cCnt,
+				})
+            end
 			local tagCnt = ZoteroAPI.tagCount()
 			if tagCnt > 0 then
 				table.insert(items, 2, {
@@ -756,7 +789,7 @@ function Plugin:onZoteroReanalyzeAction()
         return
     end
     Trapper:wrap(function()
-        Trapper:info("Synchronizing Zotero library.")
+        Trapper:info("Re-checking items in local Zotero database.")
         local e = ZoteroAPI.checkItemData(function(msg)
             Trapper:info(msg)
         end)
