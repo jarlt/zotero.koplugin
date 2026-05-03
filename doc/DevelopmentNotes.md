@@ -13,7 +13,7 @@ The database is opened with `foreign_keys` enabled, so that actions get automati
 The `user_version` database property is used to track the version of the database structure. 
 When a new (empty) database is created, sqlite sets this to 0. 
 So by checking `user_version` we can work out whether the databse is initialised.
-Once initialisation is complete it is increased to the current database version (currently 1).
+Once initialisation is complete it is increased to the current database version (currently v2).
 
 
 ### 'libraries' table
@@ -168,6 +168,74 @@ This table is pre-populated with all the different Zotero item types when the da
 		typeName TEXT, 
 		display INT DEFAULT 1 
 	);
+
+### 'publicationsItems' table
+
+This table is used to track all items which are marked as "My Publications". Added in v2 of scheme.
+
+	CREATE TABLE IF NOT EXISTS publicationsItems (
+		itemID INTEGER PRIMARY KEY
+	);
+
+### 'itemNotes' table
+
+If an item is a note then it will be included in this table. Added in v2 of scheme.
+
+	CREATE TABLE IF NOT EXISTS itemNotes (
+		itemID INTEGER PRIMARY KEY,
+		parentItemID INT,
+		note TEXT,
+		title TEXT,
+		FOREIGN KEY (itemID) REFERENCES items(itemID) ON DELETE CASCADE,
+		FOREIGN KEY (parentItemID) REFERENCES items(itemID) ON DELETE CASCADE
+	);
+	
+### 'tags' table
+
+Tags will be added to this table. Added in v2 of scheme.
+
+	CREATE TABLE IF NOT EXISTS tags (
+		tagID INTEGER PRIMARY KEY,
+		name TEXT NOT NULL UNIQUE
+	);
+
+### 'itemTags' table
+
+If an item has tags this table links the item to the appropriate tags. Added in v2 of scheme.
+
+	CREATE TABLE IF NOT EXISTS itemTags (
+		itemID INT NOT NULL,
+		tagID INT NOT NULL,
+		type INT NOT NULL,
+		PRIMARY KEY (itemID, tagID),
+		FOREIGN KEY (itemID) REFERENCES items(itemID) ON DELETE CASCADE,
+		FOREIGN KEY (tagID) REFERENCES tags(tagID) ON DELETE CASCADE
+	);
+
+### 'creators' table
+
+Creators will be added to this table. Added in v2 of scheme.
+
+	CREATE TABLE IF NOT EXISTS creators (    
+		creatorID INTEGER PRIMARY KEY,
+		firstName TEXT,
+		lastName TEXT,    
+		UNIQUE (lastName, firstName)
+	);
+
+### 'creatorItems' table
+
+If an item has creators listed then this table links the creators to the item. Added in v2 of scheme.
+
+	CREATE TABLE IF NOT EXISTS creatorItems (    
+		creatorID INT NOT NULL,
+		itemID INT NOT NULL,
+		PRIMARY KEY (creatorID, itemID),
+		FOREIGN KEY (creatorID) REFERENCES creators(creatorID) ON DELETE CASCADE,
+		FOREIGN KEY (itemID) REFERENCES items(itemID) ON DELETE CASCADE
+	);
+
+
 
 
 ## File storage structure

@@ -1,5 +1,14 @@
 # Change Log
 
+## [JA-JD 1.2 RC1] - 2026-05-03
+### Added
+- Added `Authors` folder to Zotero browser, listing all creators in the Zotero database
+- If the Zotero database contains `Tags` and `My Publications`, the Zotero browser will also show folders for these.
+
+### Changed
+- The internal sqlite database schema has been updated (now V2). Should automatically update the db if zoero.db already exists, but need to **manually** run **Re-analyze local items** to update the content after upgrade.
+
+
 ## [JA-JD 1.1 RC1] - 2026-04-26
 ### Changed
 - Merged juandiegon's changes into this repository
