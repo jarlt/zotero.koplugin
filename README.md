@@ -15,6 +15,7 @@ This addon for [KOReader](https://github.com/koreader/koreader) allows you to vi
 * Automatically download items of selected collections at sync time
 * Supports WebDAV storage backend
 * Search entries by the title of the publication or name of the first author.
+* Browse library by 'tag' or 'author' lists
 
 ### Limitations
 
@@ -23,6 +24,7 @@ This addon for [KOReader](https://github.com/koreader/koreader) allows you to vi
 * Annotations only work for pdf files, not epub or other formats
 * Only 'simple' annotations (i.e. highlight and underline) are currently supported
 * Search function currently quite limited, no real access to full author lists, DOIs, tags, etc.
+* Depending on your library size, the 'Tags' and 'Authors' folders might be rather large, covering many pages. **Tip: you can tap the page indicator at the bottom of the page and specify the first couple of letters of the item you are interested in to navigate there quickly.**
 
 
 ## Installation Guide
