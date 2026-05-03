@@ -4,6 +4,7 @@
 ### Added
 - Added `Authors` folder to Zotero browser, listing all creators in the Zotero database
 - If the Zotero database contains `Tags` and `My Publications`, the Zotero browser will also show folders for these.
+- `Notes` are now linked to items in the collection and can be accessed after long-pressing on the item in the Zotero browser.
 
 ### Changed
 - The internal sqlite database schema has been updated (now V2). Should automatically update the db if zoero.db already exists, but need to **manually** run **Re-analyze local items** to update the content after upgrade.
