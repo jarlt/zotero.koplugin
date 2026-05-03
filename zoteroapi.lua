@@ -1193,6 +1193,7 @@ function API.fetchZoteroItems(since, progress_callback)
     logger.info("Zotero: Requesting items URL: " .. items_url)
     local attachments = {}
     local annotations = {}
+    local notes = {}
 
     local annotationTypes = Annotations.supportedZoteroTypes()
 
@@ -1244,6 +1245,8 @@ function API.fetchZoteroItems(since, progress_callback)
 				elseif (item.data.itemType == 'annotation' 
 						and table_contains(annotationTypes, item.data.annotationType)) then
 					annotations[key] = item.data.parentItem
+				elseif item.data.itemType == 'note' then
+					        notes[item.key] = item.data
 				end
 				-- Check if it is part of 'My Publications'
 				if item.data.inPublications then
@@ -1289,6 +1292,10 @@ function API.fetchZoteroItems(since, progress_callback)
     -- deal with annotation items:
     if next(annotations) ~= nil then
         API.setAnnotations(annotations)
+    end
+
+    if next(notes) ~= nil then
+        API.setNotes(notes)
     end
 
     -- Close prepared statements
@@ -1558,6 +1565,7 @@ function API.checkItemData(progressCallBack)
     -- clear the following tables for a fresh start:
     db:exec("DELETE FROM collectionItems;")
     db:exec("DELETE FROM itemTags;")
+    db:exec("DELETE FROM itemNotes;")
     db:exec("DELETE FROM tags;")
     db:exec("DELETE FROM creatorItems;")
     db:exec("DELETE FROM creators;")
@@ -1634,10 +1642,16 @@ function API.checkItemData(progressCallBack)
         progressCallBack(string.format("Cataloguing attachments"))
     end
     API.setItemAttachments(attachments)
-    if progressCallBack then
-        progressCallBack(string.format("Cataloguing annotations"))
+    if next(annotations) ~= nil then
+        if progressCallBack then
+            progressCallBack(string.format("Cataloguing annotations"))
+        end
+        API.setAnnotations(annotations)
     end
-    API.setAnnotations(annotations)
+    if next(notes) ~= nil then
+        API.setNotes(notes)
+    end
+
 end
 
 function API.getDirAndPath(item)
