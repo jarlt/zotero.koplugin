@@ -801,6 +801,10 @@ function API.getWebDAVUrl()
     return API.settings:readSetting("webdav_url")
 end
 
+function API.setWebDAVEnabled(enable)
+    API.settings:saveSetting("webdav_enabled", enable)
+end
+
 function API.toggleWebDAVEnabled()
     API.settings:toggle("webdav_enabled")
 end

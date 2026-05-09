@@ -17,6 +17,7 @@ local ZoteroAPI = require("zoteroapi")
 local itemInfoViewer = require("zoteroiteminfo")
 local MultiInputDialog = require("ui/widget/multiinputdialog")
 local ButtonDialog = require("ui/widget/buttondialog")
+local CheckButton = require("ui/widget/checkbutton")
 local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 local NetworkMgr = require("ui/network/manager")
@@ -64,13 +65,310 @@ local ZoteroBrowser = Menu:extend({
 })
 
 function ZoteroBrowser:init()
-    Menu.init(self)
+    self.title_bar_left_icon = "appbar.menu"
     self.paths = {}
     self.keys = {}
+    Menu.init(self)  -- call parent's init()
 end
 
 -- Show search input
 function ZoteroBrowser:onLeftButtonTap()
+    local dialog
+    dialog = ButtonDialog:new{
+        buttons = {
+            {{
+                    text = _("Search library"),
+                    callback = function()
+                        UIManager:close(dialog)
+                        self:searchDialog()
+                    end,
+                    align = "left",
+            }},
+            {},
+            {{
+                    text = _("Sync library"),
+                    callback = function()
+                        UIManager:close(dialog)
+                        NetworkMgr:runWhenConnected(function()
+                            self:sync()
+                        end)
+                    end,
+                    align = "left",
+            }},
+--[[             {{
+                    text = _("Reload root"),
+                    callback = function()
+                        UIManager:close(dialog)
+                        self.paths = {}
+                        self.keys = {}
+                        self:displayCollection(nil)
+                    end,
+                    align = "left",
+            }},
+            {{
+                    text = _("Zotero config"),
+                    callback = function()
+                        self:setAccount()
+                    end,
+                    align = "left",
+            }},
+            {{
+                    text = _("Webdav config"),
+                    callback = function()
+                        self:webDavDialog()
+                    end,
+                    align = "left",
+            }},
+]]            {{
+                    text = _("Maintenance"),
+                    callback = function()
+                        UIManager:close(dialog)
+                        self:maintenanceDialog()
+                    end,
+                    align = "left",
+            }},
+            {{
+                    text = _("Settings"),
+                    callback = function()
+                        UIManager:close(dialog)
+                        self:settingsDialog()
+                    end,
+                    align = "left",
+            }},
+            {{
+                    text = _("About"),
+                    callback = function()
+                        UIManager:close(dialog)
+                        self.showAbout()
+                    end,
+                    align = "left",
+            }},            
+        },
+        shrink_unneeded_width = true,
+        anchor = function()
+            return self.title_bar.left_button.image.dimen
+        end,
+    }
+    UIManager:show(dialog)
+end
+
+function ZoteroBrowser:settingsDialog()
+    local settingsDialog
+    settingsDialog = ButtonDialog:new{
+        buttons = {
+            {{
+                text = _("Zotero configuration"),
+                callback = function()
+                    UIManager:close(settingsDialog)
+                    self:setAccount()
+                end,
+            }},
+            {{
+                text = _("WebDAV configuration"),
+                callback = function()
+                    UIManager:close(settingsDialog)
+                    self:webDavDialog()
+                end,
+            }},                        
+            {{
+                text = _("Other settings"),
+                callback = function()
+                    UIManager:close(settingsDialog)
+                    self:miscDialog()
+                end,
+            }},                   
+        },
+        shrink_unneeded_width = true,
+    }
+    UIManager:show(settingsDialog)
+end
+
+function ZoteroBrowser:miscDialog()
+    local settingsDialog
+    settingsDialog = ButtonDialog:new{
+        buttons = {
+            {{
+                text = _("Set items per page"),
+                callback = function()
+                    UIManager:close(settingsDialog)
+                    self:setAccount()
+                end,
+            }},
+            {{
+                text = _("Annotation default color"),
+                callback = function()
+                    UIManager:close(settingsDialog)
+                    self:webDavDialog()
+                end,
+            }},                           
+            {{
+                text = _("Other settings"),
+                callback = function()
+                    UIManager:close(settingsDialog)
+                    self:webDavDialog()
+                end,
+            }},                           
+        },
+        --shrink_unneeded_width = true,
+    }
+    UIManager:show(settingsDialog)
+end
+
+function ZoteroBrowser:maintenanceDialog()
+    local maintenanceDialog
+    maintenanceDialog = ButtonDialog:new{
+        buttons = {
+            {{
+                text = _("Re-analyse local items"),
+                callback = function()
+                    UIManager:close(maintenanceDialog)
+                    Trapper:wrap(function()
+                        Trapper:info("Re-checking items in local Zotero database.")
+                        local e = ZoteroAPI.checkItemData(function(msg)
+                            Trapper:info(msg)
+                        end)
+
+                        if e == nil then
+                            Trapper:info("Success")
+                        else
+                            Trapper:info(e)
+                        end
+                    end)
+                end,
+            }},
+            {{
+                text = _("Re-scan storage for local items"),
+                callback = function()
+                    UIManager:close(maintenanceDialog)
+                    Trapper:wrap(function()
+                        Trapper:info("Scanning local Zotero storage.")
+                        local cnt = ZoteroAPI.scanStorage()
+
+                        Trapper:info("Found " .. cnt .. " local attachments.")
+                    end)
+                end,
+            }},
+            {{
+                text = _("Re-download Zotero library"),
+                callback = function()
+                    UIManager:close(maintenanceDialog)
+                    ZoteroAPI.resetSyncState()
+                    NetworkMgr:runWhenOnline(function()
+                        Trapper:wrap(function()
+                            Trapper:info("Resynchronizing Zotero library.")
+                            local e = ZoteroAPI.syncAllItems(function(msg)
+                                Trapper:info(msg)
+                            end)
+
+                            if e == nil then
+                                Trapper:info("Success")
+                            else
+                                Trapper:info(e)
+                            end
+                        end)
+                    end)
+                end,
+            }},                     
+        },
+        shrink_unneeded_width = true,
+    }
+    UIManager:show(maintenanceDialog)
+end
+
+-- Shows dialog to edit properties of the new/existing catalog
+function ZoteroBrowser:webDavDialog()
+    local fields = {
+        {
+            text = ZoteroAPI.getWebDAVUrl(),
+            hint = _("URL"),
+        },
+        {
+            text = ZoteroAPI.getWebDAVUser(),
+            hint = _("Username"),
+        },
+        {
+            text = ZoteroAPI.getWebDAVPassword(),
+            hint = _("Password"),
+        },
+    }
+
+    local dialog, check_button_enable
+    dialog = MultiInputDialog:new{
+        title = _("WebDAV configuration"),
+        fields = fields,
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    id = "close",
+                    callback = function()
+                        UIManager:close(dialog)
+                    end,
+                },
+                {
+                    text = _("Save"),
+                    callback = function()
+                        local new_fields = dialog:getFields()
+                        new_fields[4] = check_button_enable.checked or false
+                        
+                        ZoteroAPI.setWebDAVUrl(new_fields[1])
+                        ZoteroAPI.setWebDAVUser(new_fields[2])
+                        ZoteroAPI.setWebDAVPassword(new_fields[3])
+                        ZoteroAPI.setWebDAVEnabled(new_fields[4])
+                        ZoteroAPI.saveSettingsToFile()
+
+                        UIManager:close(dialog)
+                    end,
+                },
+            },
+        },
+    }
+    check_button_enable = CheckButton:new{
+        text = _("Enable WebDav"),
+        checked = ZoteroAPI.getWebDAVEnabled(),
+        parent = dialog,
+    }
+    dialog:addWidget(check_button_enable)
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
+function ZoteroBrowser:showAbout()
+    local version = ZoteroAPI.version
+    local stats = ZoteroAPI.getStats()
+    local auto_disable_status = ZoteroAPI.getSettings():readSetting("auto_disable_pdf_writing", true)
+        and "Enabled"
+        or "Disabled"
+    UIManager:show(InfoMessage:new({
+        text = _(
+            "Plugin version: \n"
+            .. version
+            .. "\n\nLibrary info:\n  Name:\t\t"
+            .. stats.name
+            .. "\n  Version:\t"
+            .. stats.libVersion
+            .. "\n  Last sync: "
+            .. stats.lastSync
+            .. "\n\nLibrary stats:\n\tCollections:\t\t"
+            .. stats.collections
+            .. "\n\tTotal items:\t\t"
+            .. stats.items
+            .. "\n\tAttachments:\t"
+            .. stats.attachments
+            .. "\n\tAnnotations:\t"
+            .. stats.annotations
+            .. "\n\nPDF Settings:\n\tAuto-disable PDF writing:\t"
+            .. auto_disable_status
+            .. "\n"
+        ),
+        --timeout = 10,
+        --icon = "notice"
+        show_icon = false,
+    }))
+end
+
+-- Show search input
+function ZoteroBrowser:searchDialog()
     local search_query_dialog
     search_query_dialog = InputDialog:new({
         title = _("Search Zotero titles"),
@@ -100,6 +398,76 @@ function ZoteroBrowser:onLeftButtonTap()
     UIManager:show(search_query_dialog)
     search_query_dialog:onShowKeyboard()
 end
+
+function ZoteroBrowser:setAccount()
+    self.account_dialog = MultiInputDialog:new({
+        title = _("Edit Zotero account settings"),
+        fields = {
+            {
+                text = ZoteroAPI.getUserID(),
+                hint = _("User ID (integer)"),
+            },
+            {
+                text = ZoteroAPI.getAPIKey(),
+                hint = _("API Key"),
+            },
+        },
+        buttons = {
+            {
+                {
+                    text = _("Cancel"),
+                    id = "close",
+                    callback = function()
+                        self.account_dialog:onClose()
+                        UIManager:close(self.account_dialog)
+                    end,
+                },
+                {
+                    text = _("Update"),
+                    callback = function()
+                        local fields = self.account_dialog:getFields()
+                        if not string.match(fields[1], "[0-9]+") then
+                            UIManager:show(InfoMessage:new({
+                                text = _("The User ID must be an integer number."),
+                                timeout = 3,
+                                icon = "notice-warning",
+                            }))
+                            return
+                        end
+
+                        ZoteroAPI.setUserID(fields[1])
+                        ZoteroAPI.setAPIKey(fields[2])
+                        ZoteroAPI.saveSettingsToFile()
+                        self.account_dialog:onClose()
+                        UIManager:close(self.account_dialog)
+                    end,
+                },
+            },
+        },
+    })
+    UIManager:show(self.account_dialog)
+    self.account_dialog:onShowKeyboard()
+end
+
+function ZoteroBrowser:sync()
+    Trapper:wrap(function()
+        Trapper:info("Synchronizing Zotero library.")
+        local e = ZoteroAPI.syncAllItems(function(msg)
+            Trapper:info(msg)
+        end)
+
+        if e == nil then
+            Trapper:info("Success")
+                -- maybe nicer to stay in the folder we were in when starting sync, but this is easiest to implement...
+                self.paths = {}
+                self.keys = {}
+                self:displayCollection(nil)
+        else
+            Trapper:info(e)
+        end
+    end)
+end
+
 
 function ZoteroBrowser:onReturn()
 	local path = table.remove(self.paths, #self.paths)
