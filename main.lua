@@ -49,7 +49,13 @@ local ZoteroBrowser = Menu:extend({
     multilines_show_more_text = true,
 })
 
-function ZoteroBrowser:init()
+function ZoteroBrowser:init(settings, zotero_account, webdav)
+
+    self.settings = settings
+    self.zotero_account = zotero_account
+    self.webdav = webdav
+    ZoteroAPI.init(zotero_dir_path, zotero_account, webdav, settings)
+
     self.title_bar_left_icon = "appbar.menu"
     self.paths = {}
     self.keys = {}
@@ -798,12 +804,12 @@ function Plugin:onDispatcherRegisterActions()
         title = _("Zotero Collection Browser"),
         general = true,
     })
-    Dispatcher:registerAction("zotero_sync_action", {
-        category = "none",
-        event = "ZoteroSyncAction",
-        title = _("Zotero Sync"),
-        general = true,
-    })
+    -- Dispatcher:registerAction("zotero_sync_action", {
+    --     category = "none",
+    --     event = "ZoteroSyncAction",
+    --     title = _("Zotero Sync"),
+    --     general = true,
+    -- })
 end
 
 function Plugin:init()
@@ -813,8 +819,7 @@ function Plugin:init()
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
     self.initialized = init_done
-
-    logger.info("Zotero: successfully initialized!")
+    --logger.info("Zotero: successfully initialized!")
 end
 
 function Plugin:checkInitialized()
@@ -843,248 +848,17 @@ end
 function Plugin:initAPI()
     self.zotero_dir_path = DataStorage:getDataDir() .. "/zotero"
     lfs.mkdir(self.zotero_dir_path)
-    ZoteroAPI.init(self.zotero_dir_path, self.zotero_account, self.webdav, self.zotero_settings)
+    --ZoteroAPI.init(self.zotero_dir_path, self.zotero_account, self.webdav, self.zotero_settings)
 end
 
 function Plugin:addToMainMenu(menu_items)
     menu_items.zotero = {
         text = _("Zotero"),
         sorting_hint = "search",
-        sub_item_table = {
-            {
-                text = _("Browse"),
-                callback = function()
-                    self:onZoteroBrowserAction()
-                end,
-            },
-            {
-                text = _("Synchronize"),
-                callback = function()
-                    self:onZoteroSyncAction()
-                end,
-            },
-            {
-                text = _("Maintenance"),
-                callback = function()
-                    return nil
-                end,
-                sub_item_table = {
-                    {
-                        text = _("Re-analyse local items"),
-                        callback = function()
-                            self:onZoteroReanalyzeAction()
-                        end,
-                    },
-                    {
-                        text = _("Re-scan storage for local items"),
-                        callback = function()
-                            self:onZoteroRescanAction()
-                        end,
-                    },
-                    {
-                        text = _("Resync entire collection"),
-                        callback = function()
-                            ZoteroAPI.resetSyncState()
-                            self:onZoteroSyncAction()
-                        end,
-                    },
-                },
-            },
-            {
-                text = _("Settings"),
-                callback = function()
-                    return nil
-                end,
-                sub_item_table = {
-                    {
-                        text = _("Configure Zotero account"),
-                        callback = function()
-                            self:setAccount()
-                        end,
-                    },
-                    {
-                        text = _("Enable WebDAV storage"),
-                        checked_func = function()
-                            return ZoteroAPI.getWebDAVEnabled()
-                        end,
-                        callback = function()
-                            ZoteroAPI.toggleWebDAVEnabled()
-                        end,
-                    },
-                    {
-                        text = _("Configure WebDAV account"),
-                        callback = function()
-                            self:setWebdavAccount()
-                        end,
-                    },
-                    {
-                        text = _("Check WebDAV connection"),
-                        callback = function()
-                            NetworkMgr:runWhenOnline(function()
-                                local msg = nil
-                                local result = ZoteroAPI.checkWebDAV()
-                                if result == nil then
-                                    msg = _("Success, WebDAV works!")
-                                else
-                                    msg = _("WebDAV could not connect: ") .. result
-                                end
-                                UIManager:show(InfoMessage:new({
-                                    text = msg,
-                                    timeout = 3,
-                                    icon = "notice-info",
-                                }))
-                            end)
-                        end,
-                    },
-                    {
-                        text = _("Auto-disable PDF annotation writing"),
-                        checked_func = function()
-                            return ZoteroAPI.getSettings():readSetting("auto_disable_pdf_writing", true)
-                        end,
-                        callback = function()
-                            ZoteroAPI.getSettings():toggle("auto_disable_pdf_writing")
-                            ZoteroAPI.saveSettingsToFile()
-                        end,
-                    },
-                },
-            },
-            {
-                text = _("About/Info"),
-                callback = function()
-                    local version = ZoteroAPI.version
-                    local stats = ZoteroAPI.getStats()
-                    local auto_disable_status = ZoteroAPI.getSettings():readSetting("auto_disable_pdf_writing", true)
-                        and "Enabled"
-                        or "Disabled"
-                    UIManager:show(InfoMessage:new({
-                        text = _(
-                            "Plugin version: \n"
-                            .. version
-                            .. "\n\nLibrary info:\n  Name:\t\t"
-                            .. stats.name
-                            .. "\n  Version:\t"
-                            .. stats.libVersion
-                            .. "\n  Last sync: "
-                            .. stats.lastSync
-                            .. "\n\nLibrary stats:\n\tCollections:\t\t"
-                            .. stats.collections
-                            .. "\n\tTotal items:\t\t"
-                            .. stats.items
-                            .. "\n\tAttachments:\t"
-                            .. stats.attachments
-                            .. "\n\tAnnotations:\t"
-                            .. stats.annotations
-                            .. "\n\nPDF Settings:\n\tAuto-disable PDF writing:\t"
-                            .. auto_disable_status
-                            .. "\n"
-                        ),
-                        --timeout = 10,
-                        --icon = "notice"
-                        show_icon = false,
-                    }))
-
-                    return nil
-                end,
-            },
-        },
+        callback = function()
+            self:onZoteroBrowserAction()
+        end,        
     }
-end
-
-function Plugin:setAccount()
-    self.account_dialog = MultiInputDialog:new({
-        title = _("Edit User Info"),
-        fields = {
-            {
-                text = ZoteroAPI.getUserID(),
-                hint = _("User ID (integer)"),
-            },
-            {
-                text = ZoteroAPI.getAPIKey(),
-                hint = _("API Key"),
-            },
-        },
-        buttons = {
-            {
-                {
-                    text = _("Cancel"),
-                    id = "close",
-                    callback = function()
-                        self.account_dialog:onClose()
-                        UIManager:close(self.account_dialog)
-                    end,
-                },
-                {
-                    text = _("Update"),
-                    callback = function()
-                        local fields = self.account_dialog:getFields()
-                        if not string.match(fields[1], "[0-9]+") then
-                            UIManager:show(InfoMessage:new({
-                                text = _("The User ID must be an integer number."),
-                                timeout = 3,
-                                icon = "notice-warning",
-                            }))
-                            return
-                        end
-
-                        ZoteroAPI.setUserID(fields[1])
-                        ZoteroAPI.setAPIKey(fields[2])
-                        self._manager.updated = true
-                        self.account_dialog:onClose()
-                        UIManager:close(self.account_dialog)
-                    end,
-                },
-            },
-        },
-    })
-    UIManager:show(self.account_dialog)
-    self.account_dialog:onShowKeyboard()
-end
-
-function Plugin:setWebdavAccount()
-    self.webdav_account_dialog = MultiInputDialog:new({
-        title = _("Edit WebDAV credentials"),
-        fields = {
-            {
-                text = ZoteroAPI.getWebDAVUrl(),
-                hint = _("URL"),
-            },
-            {
-                text = ZoteroAPI.getWebDAVUser(),
-                hint = _("Username"),
-            },
-            {
-                text = ZoteroAPI.getWebDAVPassword(),
-                hint = _("Password"),
-            },
-        },
-        buttons = {
-            {
-                {
-                    text = _("Cancel"),
-                    id = "close",
-                    callback = function()
-                        self.webdav_account_dialog:onClose()
-                        UIManager:close(self.webdav_account_dialog)
-                    end,
-                },
-                {
-                    text = _("Update"),
-                    callback = function()
-                        local fields = self.webdav_account_dialog:getFields()
-
-                        ZoteroAPI.setWebDAVUrl(fields[1])
-                        ZoteroAPI.setWebDAVUser(fields[2])
-                        ZoteroAPI.setWebDAVPassword(fields[3])
-                        ZoteroAPI.saveSettingsToFile()
-                        self.webdav_account_dialog:onClose()
-                        UIManager:close(self.webdav_account_dialog)
-                    end,
-                },
-            },
-        },
-    })
-    UIManager:show(self.webdav_account_dialog)
-    self.webdav_account_dialog:onShowKeyboard()
 end
 
 function Plugin:onZoteroBrowserAction()
@@ -1117,55 +891,25 @@ function Plugin:onZoteroBrowserAction()
     self.browser:displayCollection(nil)
 end
 
-function Plugin:onZoteroSyncAction()
-    if not self:checkInitialized() then
-        return
-    end
-    NetworkMgr:runWhenOnline(function()
-        Trapper:wrap(function()
-            Trapper:info("Synchronizing Zotero library.")
-            local e = ZoteroAPI.syncAllItems(function(msg)
-                Trapper:info(msg)
-            end)
+-- function Plugin:onZoteroSyncAction()
+--     if not self:checkInitialized() then
+--         return
+--     end
+--     NetworkMgr:runWhenOnline(function()
+--         Trapper:wrap(function()
+--             Trapper:info("Synchronizing Zotero library.")
+--             local e = ZoteroAPI.syncAllItems(function(msg)
+--                 Trapper:info(msg)
+--             end)
 
-            if e == nil then
-                Trapper:info("Success")
-            else
-                Trapper:info(e)
-            end
-        end)
-    end)
-end
-
-function Plugin:onZoteroReanalyzeAction()
-    if not self:checkInitialized() then
-        return
-    end
-    Trapper:wrap(function()
-        Trapper:info("Re-checking items in local Zotero database.")
-        local e = ZoteroAPI.checkItemData(function(msg)
-            Trapper:info(msg)
-        end)
-
-        if e == nil then
-            Trapper:info("Success")
-        else
-            Trapper:info(e)
-        end
-    end)
-end
-
-function Plugin:onZoteroRescanAction()
-    if not self:checkInitialized() then
-        return
-    end
-    Trapper:wrap(function()
-        Trapper:info("Scanning local Zotero storage.")
-        local cnt = ZoteroAPI.scanStorage()
-
-        Trapper:info("Found " .. cnt .. " local attachments.")
-    end)
-end
+--             if e == nil then
+--                 Trapper:info("Success")
+--             else
+--                 Trapper:info(e)
+--             end
+--         end)
+--     end)
+-- end
 
 -- This automatically gets called when the plugin is closed down (typically when KOReader exits)
 function Plugin:onFlushSettings()
