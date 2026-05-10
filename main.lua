@@ -49,18 +49,19 @@ local ZoteroBrowser = Menu:extend({
     multilines_show_more_text = true,
 })
 
-function ZoteroBrowser:init(settings, zotero_account, webdav)
-
-    self.settings = settings
-    self.zotero_account = zotero_account
-    self.webdav = webdav
-    ZoteroAPI.init(zotero_dir_path, zotero_account, webdav, settings)
-
+function ZoteroBrowser:init()
     self.title_bar_left_icon = "appbar.menu"
     self.paths = {}
     self.keys = {}
     Menu.init(self)  -- call parent's init()
 end
+
+function ZoteroBrowser:initAPI()
+    self.dir_path = DataStorage:getDataDir() .. "/zotero"
+    lfs.mkdir(self.dir_path)
+    ZoteroAPI.init(self.dir_path, self.zotero_account, self.webdav, self.settings)
+end
+
 
 -- Show search input
 function ZoteroBrowser:onLeftButtonTap()
@@ -130,7 +131,7 @@ function ZoteroBrowser:onLeftButtonTap()
                     text = _("About"),
                     callback = function()
                         UIManager:close(dialog)
-                        self.showAbout()
+                        self:showAbout()
                     end,
                     align = "left",
             }},            
@@ -189,14 +190,14 @@ function ZoteroBrowser:miscDialog()
                 text = _("Annotation default color"),
                 callback = function()
                     UIManager:close(settingsDialog)
-                    self:webDavDialog()
+                    -- TO-DO
                 end,
             }},                           
             {{
-                text = _("Other settings"),
+                text = _("Auto-disable PDF annotation writing"),
                 callback = function()
                     UIManager:close(settingsDialog)
-                    self:webDavDialog()
+                    -- TO-DO
                 end,
             }},                           
         },
@@ -345,7 +346,7 @@ end
 function ZoteroBrowser:showAbout()
     local version = ZoteroAPI.version
     local stats = ZoteroAPI.getStats()
-    local auto_disable_status = ZoteroAPI.getSettings():readSetting("auto_disable_pdf_writing", true)
+    local auto_disable_status = (self.settings.auto_disable_pdf_writing or true)
         and "Enabled"
         or "Disabled"
     UIManager:show(InfoMessage:new({
@@ -822,17 +823,17 @@ function Plugin:init()
     --logger.info("Zotero: successfully initialized!")
 end
 
-function Plugin:checkInitialized()
-    if not self.initialized or self.browser == nil then
-        UIManager:show(InfoMessage:new({
-            text = _("Zotero not initialized. Please set the plugin directory first."),
-            timeout = 3,
-            icon = "notice-warning",
-        }))
-    end
+-- function Plugin:checkInitialized()
+--     if not self.initialized or self.browser == nil then
+--         UIManager:show(InfoMessage:new({
+--             text = _("Zotero not initialized. Please set the plugin directory first."),
+--             timeout = 3,
+--             icon = "notice-warning",
+--         }))
+--     end
 
-    return self.initialized
-end
+--     return self.initialized
+-- end
 
 function Plugin:loadSettings()
     if self.settings then return end
@@ -843,12 +844,6 @@ function Plugin:loadSettings()
     self.zotero_settings = self.settings:readSetting("settings", {["items_per_page"] = DEFAULT_LINES_PER_PAGE, ["auto_disable_pdf_writing"] = true})
     self.zotero_account = self.settings:readSetting("zotero", {})
     self.webdav = self.settings:readSetting("webdav", {})
-end
-
-function Plugin:initAPI()
-    self.zotero_dir_path = DataStorage:getDataDir() .. "/zotero"
-    lfs.mkdir(self.zotero_dir_path)
-    --ZoteroAPI.init(self.zotero_dir_path, self.zotero_account, self.webdav, self.zotero_settings)
 end
 
 function Plugin:addToMainMenu(menu_items)
@@ -862,17 +857,10 @@ function Plugin:addToMainMenu(menu_items)
 end
 
 function Plugin:onZoteroBrowserAction()
-    -- if not self:checkInitialized() then
-    --     return
-    -- end
     self.small_font_face = Font:getFace("smallffont")
     self:loadSettings()
-    self:initAPI()
     self.browser = ZoteroBrowser:new({
-        refresh_callback = function()
-            UIManager:setDirty(self.zotero_dialog)
-            self.ui:onRefresh()
-        end,
+        -- dir_path = self.zotero_dir_path,
         settings = self.zotero_settings,
         zotero_account = self.zotero_account,
         webdav = self.webdav,
@@ -886,6 +874,7 @@ function Plugin:onZoteroBrowserAction()
             self.browser = nil
         end,
     })
+    self.browser:initAPI()
     logger.info("Zotero: Browser initialized")
     UIManager:show(self.browser)
     self.browser:displayCollection(nil)
