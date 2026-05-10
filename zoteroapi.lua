@@ -719,10 +719,14 @@ function API.closeDB()
 end
 
 -- Initialise plugin by setting correct path and opening the sqlite database
-function API.init(zotero_dir)
+function API.init(zotero_dir, zotero_account, webdav, zotero_settings)
     API.zotero_dir = zotero_dir
     local settings_path = BaseUtil.joinPath(API.zotero_dir, "meta.lua")
     API.settings = LuaSettings:open(settings_path)
+
+    API.zotero_account = zotero_account
+    API.webdav = webdav
+    API.zotero_settings = zotero_settings
 
     API.storage_dir = BaseUtil.joinPath(API.zotero_dir, "storage")
     if not file_exists(API.storage_dir) then
@@ -768,20 +772,20 @@ function API.getStats()
 end
 
 function API.getAPIKey()
-    return API.settings:readSetting("api_key")
+    return API.zotero_account.api_key
 end
 
 function API.setAPIKey(api_key)
-    API.settings:saveSetting("api_key", api_key)
+    API.zotero_account.api_key = api_key
     API.zoteroAcessVerified = false
 end
 
 function API.getUserID()
-    return API.settings:readSetting("user_id")
+    return API.zotero_account.user_id
 end
 
 function API.setUserID(user_id)
-    API.settings:saveSetting("user_id", user_id)
+    API.zotero_account.user_id = user_id
     API.zoteroAcessVerified = false
 end
 
@@ -790,6 +794,7 @@ function API.getWebDAVEnabled()
 end
 
 function API.getWebDAVUser()
+    print("Webdav user " .. (API.webdav.user_id or "?"))
     return API.settings:readSetting("webdav_user")
 end
 
@@ -880,13 +885,13 @@ end
 -- URL with the associated credentials.
 -- returns nil if no problems where found, otherwise error string
 function API.checkWebDAV()
-    local url = API.getWebDAVUrl()
+    local url = API.webdav.url
     if url == nil then
         return "No WebDAV URL provided"
     end
 
-    local user = API.getWebDAVUser()
-    local pass = API.getWebDAVPassword()
+    -- local user = API.webdav.user_id
+    -- local pass = API.webdav.password
     local headers = API.getWebDAVHeaders()
 
     local b, c, h = https.request({
@@ -1045,8 +1050,10 @@ function API.verifyZoteroAccess()
     if API.zoteroAcessVerified then
         -- nothing to do here
     else
-        local user_id = API.settings:readSetting("user_id", "")
-        local api_key = API.settings:readSetting("api_key", "")
+        -- local user_id = API.settings:readSetting("user_id", "")
+        -- local api_key = API.settings:readSetting("api_key", "")
+        local user_id = API.zotero_account.user_id or ""
+        local api_key = API.zotero_account.api_key or ""
 
         if user_id == "" then
             return "Error: must set User ID"
@@ -1856,7 +1863,7 @@ function API.downloadAttachment(item, targetPath, download_callback)
 
     local errormsg
     logger.info("Zotero: Attachment " .. key .. " -> Downloading file...")
-    if API.settings:isTrue("webdav_enabled") then
+    if API.webdav.enabled then
         local result
         result, errormsg = API.downloadWebDAV(key, targetDir, targetPath)
     else
@@ -1919,10 +1926,10 @@ function API.downloadAndGetPath(key, download_callback)
 end
 
 function API.downloadWebDAV(key, targetDir, targetPath)
-    if API.getWebDAVUrl() == nil then
+    if API.webdav.url == nil then
         return nil, "WebDAV url not set"
     end
-    local url = API.getWebDAVUrl() .. "/" .. key .. ".zip"
+    local url = API.webdav.url .. "/" .. key .. ".zip"
     local headers = API.getWebDAVHeaders()
     local zipPath = targetDir .. "/" .. key .. ".zip"
     logger.dbg("Zotero: fetching URL " .. url)
@@ -1956,8 +1963,8 @@ function API.downloadWebDAV(key, targetDir, targetPath)
 end
 
 function API.getWebDAVHeaders()
-    local user = API.getWebDAVUser() or ""
-    local pass = API.getWebDAVPassword() or ""
+    local user = API.webdav.user_id or ""
+    local pass = API.webdav.password or ""
 
     return {
         ["Authorization"] = "Basic " .. sha2.bin_to_base64(user .. ":" .. pass),

@@ -22,6 +22,7 @@ local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 local NetworkMgr = require("ui/network/manager")
 local DocSettings = require("docsettings")
+local LuaSettings = require("luasettings")
 local Trapper = require("frontend/ui/trapper")
 
 local DEFAULT_LINES_PER_PAGE = 14
@@ -34,21 +35,6 @@ local table_empty = function(table)
     return (next(table) == nil)
 end
 
--- Function to disable PDF annotation writing for Zotero files
-local function configureZoteroDocumentSettings(file_path)
-    if file_path and file_path:match("%.pdf$") then
-        -- Check if auto-disable setting is enabled
-        local auto_disable = ZoteroAPI.getSettings():readSetting("auto_disable_pdf_writing", true)
-        if auto_disable then
-            logger.info("Zotero: Configuring PDF settings for Zotero document: " .. file_path)
-            local doc_settings = DocSettings:open(file_path)
-            doc_settings:saveSetting("highlight_write_into_pdf", false)
-            doc_settings:flush()
-            logger.info("Zotero: Disabled PDF annotation writing for Zotero document")
-        end
-    end
-end
-
 local ZoteroBrowser = Menu:extend({
     no_title = false,
     is_borderless = true,
@@ -57,7 +43,6 @@ local ZoteroBrowser = Menu:extend({
     --    subtitle = "test path",
     title_bar_fm_style = true,
     parent = nil,
-    title_bar_left_icon = "appbar.search",
     covers_full_screen = true,
     return_arrow_propagation = false,
     -- Slightly ugly using the option below, but better than truncated single line:
@@ -178,7 +163,7 @@ function ZoteroBrowser:settingsDialog()
                 end,
             }},                   
         },
-        shrink_unneeded_width = true,
+        --shrink_unneeded_width = true,
     }
     UIManager:show(settingsDialog)
 end
@@ -191,7 +176,7 @@ function ZoteroBrowser:miscDialog()
                 text = _("Set items per page"),
                 callback = function()
                     UIManager:close(settingsDialog)
-                    self:setAccount()
+                    self:setItemsPerPage()
                 end,
             }},
             {{
@@ -213,6 +198,27 @@ function ZoteroBrowser:miscDialog()
     }
     UIManager:show(settingsDialog)
 end
+
+function ZoteroBrowser:setItemsPerPage()
+    assert(self.settings ~= nil)
+    self.items_per_page_dialog = SpinWidget:new({
+        title_text = _("Set items per page"),
+        value = self.settings.items_per_page or DEFAULT_LINES_PER_PAGE,
+        value_min = 1,
+        value_max = 30,
+        callback = function(d)
+            self.settings.items_per_page = d.value
+            self._manager.updated = true
+            UIManager:show(InfoMessage:new({
+                text = _("This change requires a restart of the Zotero browser."),
+                timeout = 3,
+                icon = "notice",
+            }))
+        end,
+    })
+    UIManager:show(self.items_per_page_dialog)
+end
+
 
 function ZoteroBrowser:maintenanceDialog()
     local maintenanceDialog
@@ -279,15 +285,15 @@ end
 function ZoteroBrowser:webDavDialog()
     local fields = {
         {
-            text = ZoteroAPI.getWebDAVUrl(),
+            text = self.webdav.url,
             hint = _("URL"),
         },
         {
-            text = ZoteroAPI.getWebDAVUser(),
+            text = self.webdav.user_id,
             hint = _("Username"),
         },
         {
-            text = ZoteroAPI.getWebDAVPassword(),
+            text = self.webdav.password,
             hint = _("Password"),
         },
     }
@@ -308,15 +314,12 @@ function ZoteroBrowser:webDavDialog()
                 {
                     text = _("Save"),
                     callback = function()
-                        local new_fields = dialog:getFields()
-                        new_fields[4] = check_button_enable.checked or false
-                        
-                        ZoteroAPI.setWebDAVUrl(new_fields[1])
-                        ZoteroAPI.setWebDAVUser(new_fields[2])
-                        ZoteroAPI.setWebDAVPassword(new_fields[3])
-                        ZoteroAPI.setWebDAVEnabled(new_fields[4])
-                        ZoteroAPI.saveSettingsToFile()
-
+                        local new_fields = dialog:getFields()                        
+                        self.webdav.url = new_fields[1]
+                        self.webdav.user_id = new_fields[2]
+                        self.webdav.password = new_fields[3]
+                        self.webdav.enabled = check_button_enable.checked or false
+                        self._manager.updated = true
                         UIManager:close(dialog)
                     end,
                 },
@@ -325,7 +328,7 @@ function ZoteroBrowser:webDavDialog()
     }
     check_button_enable = CheckButton:new{
         text = _("Enable WebDav"),
-        checked = ZoteroAPI.getWebDAVEnabled(),
+        checked = self.webdav.enabled,
         parent = dialog,
     }
     dialog:addWidget(check_button_enable)
@@ -404,11 +407,11 @@ function ZoteroBrowser:setAccount()
         title = _("Edit Zotero account settings"),
         fields = {
             {
-                text = ZoteroAPI.getUserID(),
+                text = self.zotero_account.user_id,
                 hint = _("User ID (integer)"),
             },
             {
-                text = ZoteroAPI.getAPIKey(),
+                text = self.zotero_account.api_key,
                 hint = _("API Key"),
             },
         },
@@ -435,8 +438,10 @@ function ZoteroBrowser:setAccount()
                             return
                         end
 
-                        ZoteroAPI.setUserID(fields[1])
-                        ZoteroAPI.setAPIKey(fields[2])
+                        self.zotero_account.user_id = fields[1]
+                        self.zotero_account.api_key = fields[2]
+                        ZoteroAPI.zoteroAcessVerified = false
+                        self._manager.updated = true
                         ZoteroAPI.saveSettingsToFile()
                         self.account_dialog:onClose()
                         UIManager:close(self.account_dialog)
@@ -487,6 +492,21 @@ function ZoteroBrowser:onReturn()
     return true
 end
 
+-- Function to disable PDF annotation writing for Zotero files
+function ZoteroBrowser:disablePDFannotions(file_path)
+    if file_path and file_path:match("%.pdf$") then
+        -- Check if auto-disable setting is enabled
+        local auto_disable = self.settings.auto_disable_pdf_writing or true
+        if auto_disable then
+            local doc_settings = DocSettings:open(file_path)
+            doc_settings:saveSetting("highlight_write_into_pdf", false)
+            doc_settings:flush()
+            logger.info("Zotero: Disabled PDF annotation writing for Zotero document: " .. file_path)
+        end
+    end
+end
+
+
 function ZoteroBrowser:openAttachment(key)
 	local item, fileStatus, e = ZoteroAPI.checkAttachmentStatus(key)
 	local targetDir, full_path
@@ -519,7 +539,7 @@ function ZoteroBrowser:openAttachment(key)
     --logger.info("Zotero:openAttachment path: " .. full_path)
 	if full_path and lfs.attributes(full_path) then 
 		UIManager:close(self.download_dialog)
-		configureZoteroDocumentSettings(full_path)
+		self:disablePDFannotions(full_path)
 		local ReaderUI = require("apps/reader/readerui")
 		self.close_callback()
 		ReaderUI:showReader(full_path)
@@ -764,6 +784,10 @@ end
 
 local Plugin = WidgetContainer:extend{
     name = "zotero",
+    settings_file = DataStorage:getSettingsDir() .. "/zotero.lua",
+    settings = nil,
+    zotero_account = nil,
+    webdav = nil,
     is_doc_only = false,
 }
 
@@ -788,18 +812,9 @@ function Plugin:init()
     -- But at least the ZoteroAPI only needs to be initialised once
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
-    if not init_done then
-        xpcall(self.initAPI, self.initError, self)
-        init_done = true
-    end
-    xpcall(self.initBrowser, self.initError, self)
     self.initialized = init_done
 
-    logger.dbg("Zotero: successfully initialized!")
-end
-
-function Plugin:initError(e)
-    logger.err("Zotero: Could not initialize Zotero: " .. e)
+    logger.info("Zotero: successfully initialized!")
 end
 
 function Plugin:checkInitialized()
@@ -814,32 +829,21 @@ function Plugin:checkInitialized()
     return self.initialized
 end
 
+function Plugin:loadSettings()
+    if self.settings then return end
+    self.settings = LuaSettings:open(self.settings_file)
+    if next(self.settings.data) == nil then
+        self.updated = true -- first run, force flush
+    end
+    self.zotero_settings = self.settings:readSetting("settings", {["items_per_page"] = DEFAULT_LINES_PER_PAGE, ["auto_disable_pdf_writing"] = true})
+    self.zotero_account = self.settings:readSetting("zotero", {})
+    self.webdav = self.settings:readSetting("webdav", {})
+end
+
 function Plugin:initAPI()
     self.zotero_dir_path = DataStorage:getDataDir() .. "/zotero"
     lfs.mkdir(self.zotero_dir_path)
-    ZoteroAPI.init(self.zotero_dir_path)
-end
-
-function Plugin:initBrowser()
-    self.small_font_face = Font:getFace("smallffont")
-    self.browser = ZoteroBrowser:new({
-        refresh_callback = function()
-            UIManager:setDirty(self.zotero_dialog)
-            self.ui:onRefresh()
-        end,
-        close_callback = function()
-            UIManager:close(self.zotero_dialog)
-        end,
-        items_per_page = self:getItemsPerPage(),
-    })
-    self.zotero_dialog = FrameContainer:new({
-        padding = 0,
-        bordersize = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        self.browser,
-    })
-    self.browser.show_parent = self.zotero_dialog
-    logger.dbg("Zotero: Browser initialized")
+    ZoteroAPI.init(self.zotero_dir_path, self.zotero_account, self.webdav, self.zotero_settings)
 end
 
 function Plugin:addToMainMenu(menu_items)
@@ -930,12 +934,6 @@ function Plugin:addToMainMenu(menu_items)
                                     icon = "notice-info",
                                 }))
                             end)
-                        end,
-                    },
-                    {
-                        text = _("Items per page"),
-                        callback = function()
-                            self:setItemsPerPage()
                         end,
                     },
                     {
@@ -1030,7 +1028,7 @@ function Plugin:setAccount()
 
                         ZoteroAPI.setUserID(fields[1])
                         ZoteroAPI.setAPIKey(fields[2])
-                        ZoteroAPI.saveSettingsToFile()
+                        self._manager.updated = true
                         self.account_dialog:onClose()
                         UIManager:close(self.account_dialog)
                     end,
@@ -1089,44 +1087,33 @@ function Plugin:setWebdavAccount()
     self.webdav_account_dialog:onShowKeyboard()
 end
 
-function Plugin:setItemsPerPage()
-    assert(ZoteroAPI.getSettings ~= nil)
-    self.items_per_page_dialog = SpinWidget:new({
-        title_text = _("Set items per page"),
-        value = self:getItemsPerPage(),
-        value_min = 1,
-        value_max = 1000,
-        callback = function(d)
-            ZoteroAPI.getSettings():saveSetting("items_per_page", d.value)
-            ZoteroAPI.saveSettingsToFile()
-            UIManager:show(InfoMessage:new({
-                text = _("This change requires a restart of KOReader to take effect."),
-                timeout = 3,
-                icon = "notice",
-            }))
+function Plugin:onZoteroBrowserAction()
+    -- if not self:checkInitialized() then
+    --     return
+    -- end
+    self.small_font_face = Font:getFace("smallffont")
+    self:loadSettings()
+    self:initAPI()
+    self.browser = ZoteroBrowser:new({
+        refresh_callback = function()
+            UIManager:setDirty(self.zotero_dialog)
+            self.ui:onRefresh()
+        end,
+        settings = self.zotero_settings,
+        zotero_account = self.zotero_account,
+        webdav = self.webdav,
+        _manager = self,
+        items_per_page = self.zotero_settings.items_per_page,
+        is_popout = false,
+        is_borderless = true,
+        title_bar_fm_style = true,
+        close_callback = function()
+            UIManager:close(self.browser)
+            self.browser = nil
         end,
     })
-    UIManager:show(self.items_per_page_dialog)
-end
-
-function Plugin:getItemsPerPage()
-    return ZoteroAPI.getSettings():readSetting("items_per_page", DEFAULT_LINES_PER_PAGE)
-end
-
-function Plugin:onZoteroBrowserAction()
-    if not self:checkInitialized() then
-        return
-    end
-
-    self.browser:init()
-    UIManager:show(
-        self.zotero_dialog,
-        "full",
-        Geom:new({
-            w = Screen:getWidth(),
-            h = Screen:getHeight(),
-        })
-    )
+    logger.info("Zotero: Browser initialized")
+    UIManager:show(self.browser)
     self.browser:displayCollection(nil)
 end
 
@@ -1178,6 +1165,14 @@ function Plugin:onZoteroRescanAction()
 
         Trapper:info("Found " .. cnt .. " local attachments.")
     end)
+end
+
+-- This automatically gets called when the plugin is closed down (typically when KOReader exits)
+function Plugin:onFlushSettings()
+    if self.updated then
+        self.settings:flush()
+        self.updated = nil
+    end
 end
 
 return Plugin
