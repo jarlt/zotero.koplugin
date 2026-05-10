@@ -1,5 +1,5 @@
 local BaseUtil = require("ffi/util")
-local LuaSettings = require("luasettings")
+--local LuaSettings = require("luasettings")
 local https = require("ssl.https")
 local ltn12 = require("ltn12")
 local JSON = require("json")
@@ -22,7 +22,7 @@ local DocSettings = require("docsettings")
 -- /storage/<KEY>/version: Version number of downloaded attachment
 -- /meta.lua: Metadata containing library version, items etc.
 
-local API = { ["version"] = "JA-JD 1.2 RC1" } -- TODO: Update before release version
+local API = { ["version"] = "JA-JD 1.3 dev" } -- TODO: Update before release version
 
 local SUPPORTED_MEDIA_TYPES = {
     [1] = "application/pdf",
@@ -721,31 +721,31 @@ end
 -- Initialise plugin by setting correct path and opening the sqlite database
 function API.init(zotero_dir, zotero_account, webdav, zotero_settings)
     API.zotero_dir = zotero_dir
-    local settings_path = BaseUtil.joinPath(API.zotero_dir, "meta.lua")
-    API.settings = LuaSettings:open(settings_path)
 
     API.zotero_account = zotero_account
     API.webdav = webdav
     API.zotero_settings = zotero_settings
 
-    API.storage_dir = BaseUtil.joinPath(API.zotero_dir, "storage")
-    if not file_exists(API.storage_dir) then
-        lfs.mkdir(API.storage_dir)
-    end
-    --logger:setLevel(logger.levels.dbg)
-    logger.dbg("Zotero: storage dir: " .. API.storage_dir)
+    if not API.initialized then
+        API.storage_dir = BaseUtil.joinPath(API.zotero_dir, "storage")
+        if not file_exists(API.storage_dir) then
+            lfs.mkdir(API.storage_dir)
+        end
+        --logger:setLevel(logger.levels.dbg)
+        logger.dbg("Zotero: storage dir: " .. API.storage_dir)
 
-    API.db_path = BaseUtil.joinPath(API.zotero_dir, "zotero.db")
-    logger.info("Zotero: opening db path ", API.db_path)
+        API.db_path = BaseUtil.joinPath(API.zotero_dir, "zotero.db")
+        logger.info("Zotero: opening db path ", API.db_path)
+        -- get file modification time (to provide some indication of 'version')
+        local path = debug.getinfo(1, "S").source:sub(2)
+        local ts = lfs.attributes(path, "modification")
+        API.version = API.version.." ("..os.date("%Y-%m-%d %X",ts)..")" 
+        logger.info("Zotero plugin version: "..API.version)
+    end
     local db = API.openDB()
     local stats = {}
 
-    -- get file modification time (to provide some indication of 'version')
-    local path = debug.getinfo(1, "S").source:sub(2)
-	local ts = lfs.attributes(path, "modification")
-	API.version = API.version.." ("..os.date("%Y-%m-%d %X",ts)..")" 
-	logger.info("Zotero plugin version: "..API.version)
-	
+	API.initialized = true
 	--API.scanStorage()
 	--API.getItemWithAttachments("H26YYGWN")
 	--API.tagCount()
@@ -769,61 +769,6 @@ function API.getStats()
     }
     --logger.info(JSON.encode(stats))
     return stats
-end
-
-function API.getAPIKey()
-    return API.zotero_account.api_key
-end
-
-function API.setAPIKey(api_key)
-    API.zotero_account.api_key = api_key
-    API.zoteroAcessVerified = false
-end
-
-function API.getUserID()
-    return API.zotero_account.user_id
-end
-
-function API.setUserID(user_id)
-    API.zotero_account.user_id = user_id
-    API.zoteroAcessVerified = false
-end
-
-function API.getWebDAVEnabled()
-    return API.settings:isTrue("webdav_enabled")
-end
-
-function API.getWebDAVUser()
-    print("Webdav user " .. (API.webdav.user_id or "?"))
-    return API.settings:readSetting("webdav_user")
-end
-
-function API.getWebDAVPassword()
-    return API.settings:readSetting("webdav_password")
-end
-
-function API.getWebDAVUrl()
-    return API.settings:readSetting("webdav_url")
-end
-
-function API.setWebDAVEnabled(enable)
-    API.settings:saveSetting("webdav_enabled", enable)
-end
-
-function API.toggleWebDAVEnabled()
-    API.settings:toggle("webdav_enabled")
-end
-
-function API.setWebDAVUser(user)
-    API.settings:saveSetting("webdav_user", user)
-end
-
-function API.setWebDAVPassword(password)
-    API.settings:saveSetting("webdav_password", password)
-end
-
-function API.setWebDAVUrl(url)
-    API.settings:saveSetting("webdav_url", url)
 end
 
 -- Check database version. This should not change too often, but allows us to spot changes
@@ -869,16 +814,6 @@ end
 -- Set debug level for this API
 function API.setDebugLevel(level)
     zot_dbg_lvl = level
-end
-
--- Retrieve underlying settings object to make changes from the outside
-function API.getSettings()
-    return API.settings
-end
-
--- Save settings to config file
-function API.saveSettingsToFile()
-    return API.settings:flush()
 end
 
 -- Check that a webdav connection works by performing a PROPFIND operation on the
@@ -1050,8 +985,6 @@ function API.verifyZoteroAccess()
     if API.zoteroAcessVerified then
         -- nothing to do here
     else
-        -- local user_id = API.settings:readSetting("user_id", "")
-        -- local api_key = API.settings:readSetting("api_key", "")
         local user_id = API.zotero_account.user_id or ""
         local api_key = API.zotero_account.api_key or ""
 
@@ -2194,7 +2127,7 @@ function API.syncAnnotations(progress_callback)
     local total_delete_fails = 0
 
     if item_count then
-        local defaultColor = API.settings:readSetting("annotation_default_color")
+        local defaultColor = API.zotero_settings.annotation_default_color
         Annotations.setDefaultColor(defaultColor)
         for i = 1, item_count do
             local key = files[1][i]

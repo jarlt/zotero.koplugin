@@ -22,7 +22,7 @@ local lfs = require("libs/libkoreader-lfs")
 local logger = require("logger")
 local NetworkMgr = require("ui/network/manager")
 local DocSettings = require("docsettings")
-local LuaSettings = require("luasettings")
+--local LuaSettings = require("luasettings")
 local Trapper = require("frontend/ui/trapper")
 
 local DEFAULT_LINES_PER_PAGE = 14
@@ -447,7 +447,6 @@ function ZoteroBrowser:setAccount()
                         self.zotero_account.api_key = fields[2]
                         ZoteroAPI.zoteroAcessVerified = false
                         self._manager.updated = true
-                        ZoteroAPI.saveSettingsToFile()
                         self.account_dialog:onClose()
                         UIManager:close(self.account_dialog)
                     end,
