@@ -67,7 +67,7 @@ function ZoteroBrowser:onLeftButtonTap()
     dialog = ButtonDialog:new{
         buttons = {
             {{
-                    text = _("Search library"),
+                    text = "\u{f002} " .. _("Search library"),
                     callback = function()
                         UIManager:close(dialog)
                         self:searchDialog()
@@ -76,7 +76,7 @@ function ZoteroBrowser:onLeftButtonTap()
             }},
             {},
             {{
-                    text = _("Sync library"),
+                    text = "\u{f46a} " .. _("Sync library"),
                     callback = function()
                         UIManager:close(dialog)
                         NetworkMgr:runWhenConnected(function()
@@ -110,7 +110,7 @@ function ZoteroBrowser:onLeftButtonTap()
                     align = "left",
             }},
 ]]            {{
-                    text = _("Maintenance"),
+                    text = "\u{f067} " .. _("Maintenance"),
                     callback = function()
                         UIManager:close(dialog)
                         self:maintenanceDialog()
@@ -118,7 +118,7 @@ function ZoteroBrowser:onLeftButtonTap()
                     align = "left",
             }},
             {{
-                    text = _("Settings"),
+                    text = "\u{f067} " .. _("Settings"),  -- should find better icon
                     callback = function()
                         UIManager:close(dialog)
                         self:settingsDialog()
