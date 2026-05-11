@@ -726,7 +726,7 @@ function API.init(zotero_dir, zotero_account, webdav, zotero_settings)
     API.webdav = webdav
     API.zotero_settings = zotero_settings
 
-    if not API.initialized then
+    if not API.initialized then  -- don't need to do thee things again...
         API.storage_dir = BaseUtil.joinPath(API.zotero_dir, "storage")
         if not file_exists(API.storage_dir) then
             lfs.mkdir(API.storage_dir)

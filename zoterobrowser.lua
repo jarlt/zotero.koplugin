@@ -192,12 +192,33 @@ function ZoteroBrowser:miscDialog()
                 end,
             }},                           
             {{
-                text = _("Auto-disable PDF annotation writing"),
+                text = _("Auto-disable PDF annotation writing") .. (self.settings.auto_disable_pdf_writing and "  ✓" or ""),
                 callback = function()
                     UIManager:close(settingsDialog)
+                    self.settings.auto_disable_pdf_writing = not self.settings.auto_disable_pdf_writing
+                    self._manager.updated = true
+                    print(self.settings.auto_disable_pdf_writing)
                     -- TO-DO
                 end,
-            }},                           
+            }}, 
+            {{
+                text = _("Set debug level"),
+                callback = function()
+                    assert(self.settings ~= nil)
+                    self.debug_dialog = SpinWidget:new({
+                        title_text = _("Set debug level"),
+                        value = self.settings.debug_level or 0,
+                        value_min = 0,
+                        value_max = 5,
+                        callback = function(d)
+                            self.settings.debug_level = d.value
+                            ZoteroAPI.setDebugLevel(d.value)
+                            self._manager.updated = true
+                        end,
+                    })
+                    UIManager:show(self.debug_dialog)
+                end,
+            }}                          
         },
         --shrink_unneeded_width = true,
     }
