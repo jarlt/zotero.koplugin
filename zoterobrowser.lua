@@ -186,6 +186,7 @@ function ZoteroBrowser:miscDialog()
             }},
             {{
                 text = _("Annotation default color"),
+                enabled = false, -- as it is not implemented yet
                 callback = function()
                     UIManager:close(settingsDialog)
                     -- TO-DO
@@ -335,6 +336,32 @@ function ZoteroBrowser:webDavDialog()
                     id = "close",
                     callback = function()
                         UIManager:close(dialog)
+                    end,
+                },
+                {
+                    text = _("Test"),
+                    id = "test",
+                    callback = function()
+                        -- to do
+                        local new_fields = dialog:getFields()                        
+                        self.webdav.url = new_fields[1]
+                        self.webdav.user_id = new_fields[2]
+                        self.webdav.password = new_fields[3]
+                        NetworkMgr:runWhenOnline(function()
+                            local msg = nil
+                            local result = ZoteroAPI.checkWebDAV()
+                            if result == nil then
+                                msg = _("Success, WebDAV works!")
+                            else
+                                msg = _("WebDAV could not connect: ") .. result
+                            end
+                            UIManager:show(InfoMessage:new({
+                                text = msg,
+                                timeout = 5,
+                                icon = "notice-info",
+                            }))
+                        end)
+
                     end,
                 },
                 {

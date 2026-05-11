@@ -834,7 +834,7 @@ function API.checkWebDAV()
         method = "PROPFIND",
         headers = headers,
     })
-
+    logger.info("Zotero: webdav check returned", c, API.webdav.url)
     if c == 200 or c == 207 then
         return nil
     elseif c == 400 or c == 401 then
