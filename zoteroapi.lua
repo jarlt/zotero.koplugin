@@ -741,9 +741,12 @@ function API.init(zotero_dir, zotero_account, webdav, zotero_settings)
         local ts = lfs.attributes(path, "modification")
         API.version = API.version.." ("..os.date("%Y-%m-%d %X",ts)..")" 
         logger.info("Zotero plugin version: "..API.version)
+        if zotero_settings.debug_level then
+            API.setDebugLevel(zotero_settings.debug_level)
+        end
     end
     local db = API.openDB()
-    local stats = {}
+    API.stats = {}
 
 	API.initialized = true
 	--API.scanStorage()
@@ -753,22 +756,31 @@ function API.init(zotero_dir, zotero_account, webdav, zotero_settings)
 end
 
 function API.getStats()
-    local db = API.openDB()
+    if (not API.libVersion) or (API.stats.libVersion ~= API.libVersion) then
+        local db = API.openDB()
+        local c, i, a, n = db:rowexec(ZOTERO_DB_STATS)
+        local tagCount = tonumber(db:rowexec([[SELECT COUNT(name) FROM tags;]]))
+        local cCount = tonumber(db:rowexec([[SELECT COUNT(creatorID) FROM creators;]]))
+        local pubCount = tonumber(db:rowexec([[SELECT COUNT(itemID) FROM publicationsItems;]]))
 
-    local c, i, a, n = db:rowexec(ZOTERO_DB_STATS)
-    local sy, name = db:rowexec("SELECT lastSync, name FROM libraries WHERE libraryID = 1;")
-    local lastsync = os.date("%Y-%m-%d %X", tonumber(sy))
-    local stats = {
-        ["libVersion"] = API.getUserLibraryVersion(),
-        ["name"] = name,
-        ["lastSync"] = lastsync,
-        ["collections"] = tonumber(c),
-        ["items"] = tonumber(i),
-        ["attachments"] = tonumber(a),
-        ["annotations"] = tonumber(n),
-    }
-    --logger.info(JSON.encode(stats))
-    return stats
+        local sy, name = db:rowexec("SELECT lastSync, name FROM libraries WHERE libraryID = 1;")
+        local lastsync = os.date("%Y-%m-%d %X", tonumber(sy))
+        local stats = {
+            ["libVersion"] = API.getUserLibraryVersion(),
+            ["name"] = name,
+            ["lastSync"] = lastsync,
+            ["collections"] = tonumber(c),
+            ["items"] = tonumber(i),
+            ["attachments"] = tonumber(a),
+            ["annotations"] = tonumber(n),
+            ["tags"] = tagCount,
+            ["creators"] = cCount,
+            ["publications"] = pubCount,
+        }
+        logger.info(JSON.encode(stats))
+        API.stats = stats
+    end
+    return API.stats
 end
 
 -- Check database version. This should not change too often, but allows us to spot changes

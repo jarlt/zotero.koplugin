@@ -67,7 +67,7 @@ function ZoteroBrowser:onLeftButtonTap()
     dialog = ButtonDialog:new{
         buttons = {
             {{
-                    text = "\u{f002} " .. _("Search library"),
+                    text = _("Search library"), --"\u{f002} " .. _("Search library"),
                     callback = function()
                         UIManager:close(dialog)
                         self:searchDialog()
@@ -76,7 +76,7 @@ function ZoteroBrowser:onLeftButtonTap()
             }},
             {},
             {{
-                    text = "\u{f46a} " .. _("Sync library"),
+                    text = _("Sync library"), --"\u{f46a} " .. _("Sync library"),
                     callback = function()
                         UIManager:close(dialog)
                         NetworkMgr:runWhenConnected(function()
@@ -110,7 +110,7 @@ function ZoteroBrowser:onLeftButtonTap()
                     align = "left",
             }},
 ]]            {{
-                    text = "\u{f067} " .. _("Maintenance"),
+                    text = _("Maintenance"), --"\u{f067} " .. _("Maintenance"),
                     callback = function()
                         UIManager:close(dialog)
                         self:maintenanceDialog()
@@ -118,7 +118,7 @@ function ZoteroBrowser:onLeftButtonTap()
                     align = "left",
             }},
             {{
-                    text = "\u{f067} " .. _("Settings"),  -- should find better icon
+                    text = _("Settings"), --"\u{f067} " .. _("Settings"),  -- should find better icon
                     callback = function()
                         UIManager:close(dialog)
                         self:settingsDialog()
@@ -198,8 +198,6 @@ function ZoteroBrowser:miscDialog()
                     UIManager:close(settingsDialog)
                     self.settings.auto_disable_pdf_writing = not self.settings.auto_disable_pdf_writing
                     self._manager.updated = true
-                    print(self.settings.auto_disable_pdf_writing)
-                    -- TO-DO
                 end,
             }}, 
             {{
@@ -413,6 +411,12 @@ function ZoteroBrowser:showAbout()
             .. stats.attachments
             .. "\n\tAnnotations:\t"
             .. stats.annotations
+            .. "\n\tCreators:\t\t"
+            .. stats.creators
+            .. "\n\tPublications:\t"
+            .. stats.publications
+            .. "\n\tTags:\t\t"
+            .. stats.tags
             .. "\n\nPDF Settings:\n\tAuto-disable PDF writing:\t"
             .. auto_disable_status
             .. "\n"
@@ -592,9 +596,14 @@ function ZoteroBrowser:openAttachment(key)
 	if full_path and lfs.attributes(full_path) then 
 		UIManager:close(self.download_dialog)
 		self:disablePDFannotions(full_path)
-		local ReaderUI = require("apps/reader/readerui")
+        if self._manager.ui.document then
+            self._manager.ui:switchDocument(full_path)
+        else
+            self._manager.ui:openFile(full_path)
+        end
+	    --local ReaderUI = require("apps/reader/readerui")
 		self.close_callback()
-		ReaderUI:showReader(full_path)
+		--ReaderUI:showReader(full_path)
 	end
 end
 
@@ -752,6 +761,7 @@ function ZoteroBrowser:displayCollection(collection_id, itemmatch)
 		if table_empty(items) then
 			items = self:addLabelIfEmpty(items, "Library is empty! Synchronise first...")
 		else
+            local stats = ZoteroAPI.getStats()
 			table.insert(items, 1, {
 				["text"] = _("All Items"),
 				["type"] = "wildcard_collection"
@@ -762,7 +772,7 @@ function ZoteroBrowser:displayCollection(collection_id, itemmatch)
 					["text"] = _("Authors"),
 					["type"] = "creator_collection",
 					["bold"] = true,
-					["mandatory"] = cCnt,
+					["mandatory"] = stats.creators,
 				})
             end
 			local tagCnt = ZoteroAPI.tagCount()
@@ -771,7 +781,7 @@ function ZoteroBrowser:displayCollection(collection_id, itemmatch)
 					["text"] = _("Tags"),
 					["type"] = "tag_collection",
 					["bold"] = true,
-					["mandatory"] = tagCnt,
+					["mandatory"] = stats.tags,
 				})
 			end
 			local pubCnt = ZoteroAPI.publicationsCount()
@@ -780,7 +790,7 @@ function ZoteroBrowser:displayCollection(collection_id, itemmatch)
 					["text"] = _("My Publications"),
 					["type"] = "publications",
 					["bold"] = true,
-					["mandatory"] = pubCnt,
+					["mandatory"] = stats.publications,
 				})
 			end
 		end

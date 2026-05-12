@@ -58,7 +58,7 @@ function Plugin:init()
     self:onDispatcherRegisterActions()
     self.ui.menu:registerToMainMenu(self)
     --self.initialized = init_done
-    logger.info("Zotero: Plugin initialized!")
+    logger.info("Zotero: Plugin init executed!")
 end
 
 -- function Plugin:checkInitialized()
@@ -97,23 +97,25 @@ end
 function Plugin:onZoteroBrowserAction()
     self.small_font_face = Font:getFace("smallffont")
     self:loadSettings()
-    self.browser = ZoteroBrowser:new({
-        -- dir_path = self.zotero_dir_path,
-        settings = self.zotero_settings,
-        zotero_account = self.zotero_account,
-        webdav = self.webdav,
-        _manager = self,
-        items_per_page = self.zotero_settings.items_per_page,
-        is_popout = false,
-        is_borderless = true,
-        title_bar_fm_style = true,
-        close_callback = function()
-            UIManager:close(self.browser)
-            self.browser = nil
-        end,
-    })
-    self.browser:initAPI()
-    logger.info("Zotero: Browser initialized")
+    if not self.browser then
+        self.browser = ZoteroBrowser:new({
+            -- dir_path = self.zotero_dir_path,
+            settings = self.zotero_settings,
+            zotero_account = self.zotero_account,
+            webdav = self.webdav,
+            _manager = self,
+            items_per_page = self.zotero_settings.items_per_page,
+            is_popout = false,
+            is_borderless = true,
+            title_bar_fm_style = true,
+            close_callback = function()
+                --UIManager:close(self.browser)
+                --self.browser = nil
+            end,
+        })
+        self.browser:initAPI()
+        logger.info("Zotero: Browser initialized")
+    end
     UIManager:show(self.browser)
     self.browser:displayCollection(nil)
 end
