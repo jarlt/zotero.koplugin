@@ -33,6 +33,15 @@ local table_empty = function(table)
     return (next(table) == nil)
 end
 
+local sortTextDes = function(a, b)
+    return a.text > b.text
+end
+
+local sortTextAsc = function(a, b)
+    return a.text < b.text
+end
+
+
 local ZoteroBrowser = Menu:extend({
     no_title = false,
     is_borderless = true,
@@ -55,6 +64,8 @@ function ZoteroBrowser:init()
 end
 
 function ZoteroBrowser:initAPI()
+    self.sorting = sortTextAsc
+    self.sort_ascend = true
     self.dir_path = DataStorage:getDataDir() .. "/zotero"
     lfs.mkdir(self.dir_path)
     ZoteroAPI.init(self.dir_path, self.zotero_account, self.webdav, self.settings)
@@ -82,6 +93,19 @@ function ZoteroBrowser:onLeftButtonTap()
                         NetworkMgr:runWhenConnected(function()
                             self:sync()
                         end)
+                    end,
+                    align = "left",
+            }},
+            {{
+                    text = _("Sorting"), 
+                    callback = function()
+                        UIManager:close(dialog)
+                        if self.sort_ascend then
+                            self.sorting = sortTextDes
+                        else
+                            self.sorting = sortTextAsc 
+                        end
+                        self.sort_ascend = not self.sort_ascend
                     end,
                     align = "left",
             }},
@@ -719,6 +743,7 @@ function ZoteroBrowser:displaySearchResults(query)
     table.insert(self.paths, query)
     table.insert(self.keys, "search")
     items = self:addLabelIfEmpty(items, "No search results!")
+    table.sort(items, self.sorting)
     self:setItems(items)
 end
 
@@ -755,38 +780,35 @@ function ZoteroBrowser:displayMyPublications()
 end
 
 function ZoteroBrowser:displayCollection(collection_id, itemmatch)
-    local items = ZoteroAPI.displayCollection(collection_id)
+    local collections, items = ZoteroAPI.displayCollection(collection_id)
 
     if collection_id == nil then
-		if table_empty(items) then
-			items = self:addLabelIfEmpty(items, "Library is empty! Synchronise first...")
+		if table_empty(items) and table_empty(collections) then
+			items = self:addLabelIfEmpty(items, "Local library is empty! Synchronise first...")
 		else
             local stats = ZoteroAPI.getStats()
-			table.insert(items, 1, {
+			table.insert(collections, 1, {
 				["text"] = _("All Items"),
 				["type"] = "wildcard_collection"
 			})
-            local cCnt = ZoteroAPI.creatorCount()
-            if cCnt > 0 then
-				table.insert(items, 2, {
+            if stats.creators > 0 then
+				table.insert(collections, 2, {
 					["text"] = _("Authors"),
 					["type"] = "creator_collection",
 					["bold"] = true,
 					["mandatory"] = stats.creators,
 				})
             end
-			local tagCnt = ZoteroAPI.tagCount()
-			if tagCnt > 0 then
-				table.insert(items, 2, {
+			if stats.tags > 0 then
+				table.insert(collections, 2, {
 					["text"] = _("Tags"),
 					["type"] = "tag_collection",
 					["bold"] = true,
 					["mandatory"] = stats.tags,
 				})
 			end
-			local pubCnt = ZoteroAPI.publicationsCount()
-			if pubCnt > 0 then
-				table.insert(items, 2, {
+			if stats.publications > 0 then
+				table.insert(collections, 2, {
 					["text"] = _("My Publications"),
 					["type"] = "publications",
 					["bold"] = true,
@@ -794,10 +816,14 @@ function ZoteroBrowser:displayCollection(collection_id, itemmatch)
 				})
 			end
 		end
-	else
+	elseif table_empty(collections) then
 	    items = self:addLabelIfEmpty(items)
 	end
-    self:setItems(items, itemmatch)
+
+    table.sort(items,  self.sorting)
+
+    table.move(items, 1, #items, #collections + 1, collections)
+    self:setItems(collections, itemmatch)
 end
 
 function ZoteroBrowser:addLabelIfEmpty(items, msg)

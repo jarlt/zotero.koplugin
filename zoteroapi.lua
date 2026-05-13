@@ -338,6 +338,22 @@ WHERE
 ;
 ]]
 
+local ZOTERO_GET_SUB_COLLECTIONS = [[
+WITH cid AS (SELECT collectionID AS ID FROM collections WHERE key = ?1)
+SELECT
+	key,
+	colname,
+	'collection'
+FROM (
+	SELECT
+		key,
+		collectionName || '/' AS colname
+	FROM collections, cid
+	WHERE parentCollectionID = cid.ID
+	ORDER By colname)
+;
+]]
+
 local ZOTERO_GET_COLLECTION_ITEMS = [[
 WITH cid AS (SELECT collectionID AS ID FROM collections WHERE key = ?1)
 SELECT
@@ -574,7 +590,11 @@ SELECT
 	colls,
 	allItems,
 	attachments,
-	annotations
+	annotations,
+    tagC,
+    creatorC,
+    pubs,
+    notes
 FROM
 	((
 	SELECT
@@ -596,6 +616,26 @@ FROM
 		COUNT(itemID) AS annotations
 	FROM
 		itemAnnotations
+    ),(
+    SELECT 
+        COUNT(name) as tagC
+    FROM 
+        tags
+    ),(
+    SELECT 
+        COUNT(creatorID) as creatorC
+    FROM 
+        creators
+    ),(
+    SELECT 
+        COUNT(itemID) as pubs
+    FROM 
+        publicationsItems
+    ),(
+    SELECT 
+        COUNT(itemID) as notes
+    FROM 
+        itemNotes
 	));
 ]]
 
@@ -616,7 +656,7 @@ local function table_contains(t, search_value)
     return false
 end
 
-local function formatICollectiontem(sqlRow)
+local function formatCollectionItem(sqlRow)
     local item_key = sqlRow[1]
     local text = sqlRow[2]
     local item_type = sqlRow[3]
@@ -758,10 +798,7 @@ end
 function API.getStats()
     if (not API.libVersion) or (API.stats.libVersion ~= API.libVersion) then
         local db = API.openDB()
-        local c, i, a, n = db:rowexec(ZOTERO_DB_STATS)
-        local tagCount = tonumber(db:rowexec([[SELECT COUNT(name) FROM tags;]]))
-        local cCount = tonumber(db:rowexec([[SELECT COUNT(creatorID) FROM creators;]]))
-        local pubCount = tonumber(db:rowexec([[SELECT COUNT(itemID) FROM publicationsItems;]]))
+        local c, i, a, an, t, cr, p, n = db:rowexec(ZOTERO_DB_STATS)
 
         local sy, name = db:rowexec("SELECT lastSync, name FROM libraries WHERE libraryID = 1;")
         local lastsync = os.date("%Y-%m-%d %X", tonumber(sy))
@@ -772,12 +809,13 @@ function API.getStats()
             ["collections"] = tonumber(c),
             ["items"] = tonumber(i),
             ["attachments"] = tonumber(a),
-            ["annotations"] = tonumber(n),
-            ["tags"] = tagCount,
-            ["creators"] = cCount,
-            ["publications"] = pubCount,
+            ["annotations"] = tonumber(an),
+            ["tags"] = tonumber(t),
+            ["creators"] = tonumber(cr),
+            ["publications"] = tonumber(p),
+            ["notes"] = tonumber(n),
         }
-        logger.info(JSON.encode(stats))
+        --logger.info(JSON.encode(stats))
         API.stats = stats
     end
     return API.stats
@@ -1946,59 +1984,45 @@ function API.batchDownload(progress_callback)
     return download_fails, failed_downloads
 end
 
--- Return a table of entries of a collection.
+-- Return 2 tables for content of the specified collection.
 --
 -- If key is nil, entries of the root collection will be given.
--- Each entry is a table with at least two values, the key and name.
--- Collections will have a display name that ends with a slash and contain true
--- under the key "collection" in their table.
+-- First table contains (sub-) collections
+-- Second table the actual bibliography items
+-- Changed behaviour from original version!
 function API.displayCollection(key)
     local db = API.openDB()
-    local stmt = db:prepare(ZOTERO_QUERY_ITEMS)
-
-    stmt:reset()
-    stmt:clearbind()
 
     if key == nil then
         -- use fake key for root collection
         key = "/"
         --print("Key is nil")
     end
-    stmt:bind1(1, key)
 
-    local result = {}
+    local subcollections = {}
+    local stmt = db:prepare(ZOTERO_GET_SUB_COLLECTIONS)
+    stmt:reset():clearbind():bind1(1, key)
+
     local row, _ = stmt:step({}, {})
     while row ~= nil do
---[[         local item_key = row[1]
-        local text = row[2]
-        local item_type = row[3]
-
-        -- For items (not collections), row[2] is JSON that needs to be parsed
-        if item_type ~= "collection" then
-            local item_data = JSON.decode(text)
-            -- Construct display name: prepend creator summary if available
-            local creator_summary = item_data.meta and item_data.meta.creatorSummary or ""
-            local title = item_data.data and item_data.data.title or ""
-            if creator_summary ~= "" then
-                text = creator_summary .. " - " .. title
-            else
-                text = title
-            end
-        end
-
-        table.insert(result, {
-            ["key"] = item_key,
-            ["text"] = text,
-            ["type"] = item_type,
-        })
- ]]        
-        table.insert(result, formatICollectiontem(row))
-        --print(row[1], row[2], row[3])
+        table.insert(subcollections, formatCollectionItem(row))
         row = stmt:step(row)
     end
     stmt:close()
 
-    return result
+    local stmt_item = db:prepare(ZOTERO_GET_COLLECTION_ITEMS)
+    stmt_item:reset():clearbind():bind1(1, key)
+
+    local items = {}
+    row, _ = stmt_item:step({}, {})
+    while row ~= nil do
+        table.insert(items, formatCollectionItem(row))
+        --print(row[1], row[2], row[3])
+        row = stmt_item:step(row)
+    end
+    stmt_item:close()
+
+    return subcollections, items
 end
 
 function API.displaySearchResults(query)
@@ -2528,7 +2552,7 @@ function API.getTaggedItems(tag)
     end
     local items = {}
     for i=1,nr do
-        table.insert(items, formatICollectiontem({result[1][i], result[2][i], result[3][i]}))
+        table.insert(items, formatCollectionItem({result[1][i], result[2][i], result[3][i]}))
         end
     return items
 end
@@ -2586,7 +2610,7 @@ function API.getCreatorItems(cID)
 
     local items = {}
     for i=1,nc do
-        table.insert(items, formatICollectiontem({result[1][i], result[2][i], result[3][i]}))
+        table.insert(items, formatCollectionItem({result[1][i], result[2][i], result[3][i]}))
     end
     return items
 end
@@ -2614,7 +2638,7 @@ function API.getMyPublications()
 
     local items = {}
     for i = 1, nr do
-        table.insert(items, formatICollectiontem({result[1][i], result[2][i], result[3][i]}))
+        table.insert(items, formatCollectionItem({result[1][i], result[2][i], result[3][i]}))
     end
     return items
 end
