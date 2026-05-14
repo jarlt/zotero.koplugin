@@ -274,7 +274,7 @@ function ZoteroBrowser:maintenanceDialog()
     maintenanceDialog = ButtonDialog:new{
         buttons = {
             {{
-                text = _("Re-analyse local items"),
+                text = _("Re-analyse local Zotero database"),
                 callback = function()
                     UIManager:close(maintenanceDialog)
                     Trapper:wrap(function()
@@ -284,6 +284,7 @@ function ZoteroBrowser:maintenanceDialog()
                         end)
 
                         if e == nil then
+                            ZoteroAPI.getStats(true)
                             Trapper:info("Success")
                         else
                             Trapper:info(e)
@@ -316,6 +317,7 @@ function ZoteroBrowser:maintenanceDialog()
                             end)
 
                             if e == nil then
+                                ZoteroAPI.getStats(true)
                                 Trapper:info("Success")
                             else
                                 Trapper:info(e)

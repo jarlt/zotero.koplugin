@@ -795,8 +795,8 @@ function API.init(zotero_dir, zotero_account, webdav, zotero_settings)
 	--API.getTags()
 end
 
-function API.getStats()
-    if (not API.libVersion) or (API.stats.libVersion ~= API.libVersion) then
+function API.getStats(force)
+    if force or (not API.libVersion) or (API.stats.libVersion ~= API.libVersion) then
         local db = API.openDB()
         local c, i, a, an, t, cr, p, n = db:rowexec(ZOTERO_DB_STATS)
 

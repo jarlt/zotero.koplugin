@@ -79,9 +79,34 @@ function Plugin:loadSettings()
     if next(self.settings.data) == nil then
         self.updated = true -- first run, force flush
     end
-    self.zotero_settings = self.settings:readSetting("settings", default_settings)
     self.zotero_account = self.settings:readSetting("zotero", {})
     self.webdav = self.settings:readSetting("webdav", {})
+    self.zotero_settings = self.settings:readSetting("settings", default_settings)
+    if self.updated then    -- see if there is an old style settings file. If so, take data
+        local BaseUtil = require("ffi/util")
+        local old_settings_path = BaseUtil.joinPath(BaseUtil.joinPath(DataStorage:getDataDir(), "zotero"), "meta.lua")
+        local old_settings = LuaSettings:open(old_settings_path)
+        if next(old_settings.data) ~= nil then
+            if old_settings:readSetting("user_id") then
+                self.zotero_account.user_id = old_settings:readSetting("user_id")
+            end
+            if old_settings:readSetting("api_key") then
+                self.zotero_account.api_key = old_settings:readSetting("api_key")
+            end
+            if old_settings:readSetting("webdav_url") then
+                self.webdav.url = old_settings:readSetting("webdav_url")
+            end
+            if old_settings:readSetting("webdav_user") then
+                self.webdav.user_id = old_settings:readSetting("webdav_user")
+            end
+            if old_settings:readSetting("webdav_password") then
+                self.webdav.password = old_settings:readSetting("webdav_password")
+            end
+            if old_settings:readSetting("webdav_enabled") then
+                self.webdav.enabled = old_settings:readSetting("webdav_enabled")
+            end
+        end
+    end
 end
 
 function Plugin:addToMainMenu(menu_items)
